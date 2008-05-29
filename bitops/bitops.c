@@ -13,8 +13,8 @@ enum {
 
 enum Formats {
 	HEX,
-	DEC,
-	BIN,
+	LIST,
+	EACH,
 	COUNT // Output only
 };
 
@@ -30,6 +30,29 @@ enum Actions {
 
 static int ifmt = HEX, ofmt = HEX;
 static int action = NONE;
+
+void parse_format(char *fmt)
+{
+	while (*fmt) {
+		switch (*fmt++) {
+		case 'x':
+			ifmt = HEX;
+			break;
+		case 'X':
+			ofmt = HEX;
+			break;
+		case 'l':
+			ifmt = LIST;
+			break;
+		case 'L':
+			ofmt = LIST;
+			break;
+		case 'E':
+			ofmt = EACH;
+			break;
+		}
+	}
+}
 
 unsigned long do_action(int action, unsigned long *imask, unsigned long *amask, unsigned long *omask)
 {
@@ -70,7 +93,7 @@ void parse_bitmap(int fmt, const char *str, unsigned long *mask, unsigned int nb
 	int err;
 
 	switch (ifmt) {
-	case DEC:
+	case LIST:
 		err = bitmap_parselist(str, mask, nbits);
 		if (err) {
 			fprintf(stderr, "Bad list format %s\n", str);
@@ -90,39 +113,43 @@ void parse_bitmap(int fmt, const char *str, unsigned long *mask, unsigned int nb
 
 static struct option main_lopts[] = {
         { "help",   0, 0, 'h' },
-        { "ihex",   0, 0, 'x' },
-        { "idec",   0, 0, 'd' },
-        { "ohex",   0, 0, 'X' },
-        { "odec",   0, 0, 'D' },
+        { "format", 1, 0, 'f' },
         { "weight", 0, 0, 'w' },
         { "invert", 0, 0, 'i' },
         { "and",    1, 0, 'a' },
         { "or",     1, 0, 'o' },
-        { "xor",    1, 0, 'O' },
+        { "xor",    1, 0, 'x' },
         { "andnot", 1, 0, 'A' },
         { 0, 0, 0, 0 }
 };
 
-static char main_sopts[] = "hxdXDwia:o:O:A:";
+static char main_sopts[] = "hf:wia:o:x:A:";
 
 static char main_help[] = 
         "bitops reads bit masks from standard input and performs various\n"
         "operations on them. Result is written to standard out.\n"
         "Usage:\n"
-        "\tbitops <i/o format> [options]\n"
-        "I/O format:\n"
-        "\t--ihex -x hex input format (default)\n"
-        "\t--idec -d dec list input format\n"
-        "\t--ohex -X hex output format (default)\n"
-        "\t--odec -D dec list output format\n"
+        "\tbitops [options]\n"
+	"\n"
         "Options:\n"
+        "\t--format -f <STR>   format of input and output masks\n"
         "\t--weight -w         count number of non-zero bits\n"
         "\t--invert -i         invert bits in the input mask\n"
         "\t--and -a <MASK>     output = input & MASK\n"
         "\t--or  -o <MASK>     output = input | MASK"
-        "\t--xor -O <MASK>     output = input ^ MASK\n"
+        "\t--xor -x <MASK>     output = input ^ MASK\n"
         "\t--andnot -A <MASK>  output = input & ~MASK\n"
-        "\t--help              show this help\n";
+        "\t--help              show this help\n"
+	"\n"
+        "I/O format:\n"
+        "\tx hex mask input format (default)\n"
+        "\tX hex mask output format (default)\n"
+        "\tl comma separated list input format with ranges\n"
+        "\tL comma separated list output format with ranges\n"
+        "\tE space separated output format w/o ranges\n"
+
+	"\n";
+
 
 int main(int argc, char **argv)
 {
@@ -130,24 +157,12 @@ int main(int argc, char **argv)
 
 	unsigned long amask[NLONGS], imask[NLONGS], omask[NLONGS];
 	unsigned long count;
-	char str[4096];
+	char *fmt, str[4096];
 
         while ((opt=getopt_long(argc, argv, main_sopts, main_lopts, NULL)) != -1) {
                 switch(opt) {
-            	case 'd':
-                        ifmt = DEC;
-                        break;
-
-                case 'x':
-                        ifmt = HEX;
-                        break;
-
-           	case 'D':
-                        ofmt = DEC;
-                        break;
-
-                case 'X':
-                        ofmt = HEX;
+            	case 'f':
+                        fmt = strdup(optarg);
                         break;
 
                 case 'w':
@@ -169,7 +184,7 @@ int main(int argc, char **argv)
 			parse_bitmap(ifmt, optarg, amask, NBITS);
 			break;
 
-		case 'O':
+		case 'x':
 			action = XOR;
 			parse_bitmap(ifmt, optarg, amask, NBITS);
 			break;
@@ -194,6 +209,8 @@ int main(int argc, char **argv)
                 exit(1);
         }
 
+	parse_format(fmt);
+
 	// Read from stdin
 	while (1) {
 		int n = scanf("%4096s", str);
@@ -208,8 +225,12 @@ int main(int argc, char **argv)
 
 		// Print out result
 		switch (ofmt) {
-		case DEC:
+		case LIST:
 			bitmap_scnlistprintf(str, sizeof(str), omask, count);
+			break;
+
+		case EACH:
+			bitmap_scneachprintf(str, sizeof(str), omask, count);
 			break;
 
 		case HEX:
