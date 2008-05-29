@@ -1,0 +1,22 @@
+dnl Process this file with autoconf to produce a configure script.
+
+AC_INIT()
+
+AC_CANONICAL_SYSTEM
+
+VERSION=`cat $srcdir/VERSION`
+AC_SUBST(VERSION)
+AM_INIT_AUTOMAKE(syspart, $VERSION)
+AC_DEFINE_UNQUOTED(BUILDATE, "`date '+%D %k:%M:%S'`")
+
+dnl Checks for programs.
+AC_PROG_CC
+AC_PROG_INSTALL
+
+AC_SUBST(prefix)
+
+AC_OUTPUT([
+    Makefile
+    bitops/Makefile
+    syspart.spec
+])
