@@ -134,11 +134,11 @@ int main(int argc, char **argv)
 
         while ((opt=getopt_long(argc, argv, main_sopts, main_lopts, NULL)) != -1) {
                 switch(opt) {
-            	case 'l':
+            	case 'd':
                         ifmt = DEC;
                         break;
 
-                case 'm':
+                case 'x':
                         ifmt = HEX;
                         break;
 
