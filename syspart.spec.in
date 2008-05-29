@@ -1,0 +1,33 @@
+# Note that this is NOT a relocatable package
+%define prefix @prefix@
+
+Summary: System partitioning tools
+Name: syspart
+Version: @VERSION@
+Release: 2
+License: BSD 2-clause
+Group: Applications/System
+Vendor: Max Krasnyansky
+Packager: Max Krasnyansky <max.krasnyansky@gmail.com>
+BuildRoot: %{prefix}
+source0: syspart-%{version}.tar.gz
+
+%description
+Syspart is a set of tools for partitioning system resoures.
+CPUs, interrupt handling, etc.
+
+%prep
+%setup
+
+%build
+./configure && make
+
+%install
+make DESTDIR=%{buildroot} install
+
+%files
+%defattr(-, root, root)
+
+/etc/init.d/syspart
+/etc/sysconfig/syspart
+%{prefix}/bin/bitops

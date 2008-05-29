@@ -1,0 +1,111 @@
+#!/bin/sh
+# Startup script for syspart
+#
+# chkconfig: 12345 06 99
+# description: Partition system resources
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+#
+# Make sire we have bitops
+[ -f /usr/bin/bitops ] || exit 5
+
+# Get config.
+[ -f /etc/sysconfig/syspart ] || exit 5
+
+. /etc/sysconfig/syspart
+
+DEBUG="2>/dev/tty"
+
+# Check if a task is pinned to a single CPU
+is_unpinned()
+{
+	mask=`grep Cpus $1/status | cut -d: -f2`
+	[ `bitcount $mask` -gt 1 ]
+}
+
+# Dump a list of unpinned tasks
+unpinned_tasks()
+{
+	pids=""
+	for i in /proc/[0-9]*; do
+		if is_unpinned $i; then 
+			pids="$pids $i"
+		fi
+	done
+	echo $pids
+}
+
+start() {
+	# Mount cgroup fs
+	if [ ! -d /dev/cgroup ]; then 
+		mkdir /dev/cgroup
+		mount -t cgroup -ocpuset cpuset /dev/cgroup
+	fi
+	cd /dev/cgroup
+	
+	# Disable load balancing between cpusets
+	echo 0 > cpuset.sched_load_balance
+	
+	# Set default IRQ affinity
+	echo $BOOT_CPUS_MASK > /proc/irq/default_smp_affinity
+	for i in /proc/irq/[0-9]*; do
+		echo $i
+		echo $BOOT_CPUS_MASK > $i/smp_affinity $DEBUG
+	done
+
+	# Create boot cpuset
+	if [ ! -d boot ]; then
+		mkdir boot
+		echo $BOOT_CPUS_LIST > boot/cpuset.cpus
+		echo $BOOT_MEMS > boot/cpuset.mems
+		echo 1 > boot/cpuset.cpu_exclusive
+		echo 1 > boot/cpuset.sched_load_balance
+	fi
+	cd boot
+
+	for i in `unpinned_tasks`; do
+		task=`basename $i`
+		echo $task > tasks $DEBUG
+	done
+
+	RETVAL=0
+	return $RETVAL 
+}
+
+stop() {
+	RETVAL=0
+	return $RETVAL 
+}
+
+case "$1" in
+  start)
+    start
+    ;;
+
+  stop)
+    stop
+    ;;
+
+  status)
+    ;;
+
+  restart)
+    stop
+    start
+    ;;
+
+  condrestart)
+    ;;
+
+  *)
+    echo $"Usage: $0 {start|stop|restart|condrestart|status}"
+    exit 3
+    ;;
+esac
+
+exit $RETVAL
+
+BOOT_CPUS="0-3"
+BOOT_MEMS="0"
