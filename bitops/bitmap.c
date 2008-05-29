@@ -433,6 +433,20 @@ int bitmap_scnlistprintf(char *buf, unsigned int buflen,
 	return len;
 }
 
+int bitmap_scneachprintf(char *buf, unsigned int buflen, const unsigned long *mask, int nbits)
+{
+	int len = 0, b = -1;
+
+	if (buflen == 0)
+		return 0;
+	buf[0] = 0;
+
+	while ((b = find_next_bit(mask, nbits, b+1)) < nbits)
+		len += snprintf(buf + len, buflen - len, "%d ", b);
+
+	return len;
+}
+
 /**
  * bitmap_parselist - convert list format ASCII string to bitmap
  * @bp: read nul-terminated user string from this buffer
