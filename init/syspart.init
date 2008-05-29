@@ -16,59 +16,74 @@
 
 . /etc/sysconfig/syspart
 
-DEBUG="2>/dev/tty"
+# Convert cpu list to hex mask
+DOM0_CPUS_MASK=`echo $DOM0_CPUS | bitops -d`
+DOM0_CPUS_LIST=$DOM0_CPUS
+DOM0_MEMS_LIST=$DOM0_MEMS
 
-# Check if a task is pinned to a single CPU
-is_unpinned()
+# IRQ affinity
+setup_irq_affinity()
 {
-	mask=`grep Cpus $1/status | cut -d: -f2`
-	[ `bitcount $mask` -gt 1 ]
-}
-
-# Dump a list of unpinned tasks
-unpinned_tasks()
-{
-	pids=""
-	for i in /proc/[0-9]*; do
-		if is_unpinned $i; then 
-			pids="$pids $i"
-		fi
-	done
-	echo $pids
-}
-
-start() {
-	# Mount cgroup fs
-	if [ ! -d /dev/cgroup ]; then 
-		mkdir /dev/cgroup
-		mount -t cgroup -ocpuset cpuset /dev/cgroup
+	# Set default IRQ affinity if supported
+	if [ -f /proc/irq/default_smp_affinity ]; then 
+		echo $DOM0_CPUS_MASK > /proc/irq/default_smp_affinity
 	fi
-	cd /dev/cgroup
-	
+	for i in /proc/irq/[0-9]*; do
+		echo $DOM0_CPUS_MASK > $i/smp_affinity 2>/dev/null
+	done
+}
+
+# Check if task is pinned to a single CPU
+task_not_pinned()
+{
+	[ `taskset -p $1 | cut -d: -f2 | bitops -w` -gt 1 ]
+}
+
+# Mount cpuset
+init_cpuset()
+{
+	if [ ! -d /dev/cpuset ]; then 
+		mkdir /dev/cpuset
+		if ! mount -l | grep -q /dev/cpuset; then 
+			mount -t cgroup -ocpuset cpuset /dev/cpuset
+		fi
+	fi
+
+	cd /dev/cpuset
+}
+
+# Create cpusets and move all the tasks
+partition_cpus()
+{
+	init_cpuset
+
 	# Disable load balancing between cpusets
 	echo 0 > cpuset.sched_load_balance
-	
-	# Set default IRQ affinity
-	echo $BOOT_CPUS_MASK > /proc/irq/default_smp_affinity
-	for i in /proc/irq/[0-9]*; do
-		echo $i
-		echo $BOOT_CPUS_MASK > $i/smp_affinity $DEBUG
-	done
 
 	# Create boot cpuset
 	if [ ! -d boot ]; then
 		mkdir boot
-		echo $BOOT_CPUS_LIST > boot/cpuset.cpus
-		echo $BOOT_MEMS > boot/cpuset.mems
+		echo $DOM0_CPUS_LIST > boot/cpuset.cpus
+		echo $DOM0_MEMS_LIST > boot/cpuset.mems
 		echo 1 > boot/cpuset.cpu_exclusive
 		echo 1 > boot/cpuset.sched_load_balance
 	fi
-	cd boot
 
-	for i in `unpinned_tasks`; do
-		task=`basename $i`
-		echo $task > tasks $DEBUG
+	# Move tasks
+	for t in `cat tasks`; do
+		# Check if a task is pinned to a single CPU
+		if task_not_pinned $t; then
+			echo $t > boot/tasks
+		fi
 	done
+}
+
+start() {
+	# Move IRQs first
+	setup_irq_affinity
+
+	# Partition CPUs
+	partition_cpus
 
 	RETVAL=0
 	return $RETVAL 
@@ -106,6 +121,3 @@ case "$1" in
 esac
 
 exit $RETVAL
-
-BOOT_CPUS="0-3"
-BOOT_MEMS="0"
