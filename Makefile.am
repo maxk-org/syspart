@@ -1,5 +1,3 @@
-MAKEFLAGS = -s
-
 SUBDIRS = bitops
 
 topsrc   = @abs_top_srcdir@

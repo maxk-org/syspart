@@ -1,0 +1,2 @@
+BOOT_CPUS="0-3"
+BOOT_MEMS="0"
