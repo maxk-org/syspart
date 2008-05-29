@@ -114,6 +114,7 @@ void parse_bitmap(int fmt, const char *str, unsigned long *mask, unsigned int nb
 static struct option main_lopts[] = {
         { "help",   0, 0, 'h' },
         { "format", 1, 0, 'f' },
+        { "fmt",    1, 0, 'f' },
         { "weight", 0, 0, 'w' },
         { "invert", 0, 0, 'i' },
         { "and",    1, 0, 'a' },
@@ -132,7 +133,7 @@ static char main_help[] =
         "\tbitops [options]\n"
 	"\n"
         "Options:\n"
-        "\t--format -f <STR>   format of input and output masks\n"
+        "\t--format --fmt -f <STR>  format of input and output masks\n"
         "\t--weight -w         count number of non-zero bits\n"
         "\t--invert -i         invert bits in the input mask\n"
         "\t--and -a <MASK>     output = input & MASK\n"
@@ -157,12 +158,12 @@ int main(int argc, char **argv)
 
 	unsigned long amask[NLONGS], imask[NLONGS], omask[NLONGS];
 	unsigned long count;
-	char *fmt, str[4096];
+	char str[4096];
 
         while ((opt=getopt_long(argc, argv, main_sopts, main_lopts, NULL)) != -1) {
                 switch(opt) {
             	case 'f':
-                        fmt = strdup(optarg);
+			parse_format(optarg);
                         break;
 
                 case 'w':
@@ -208,8 +209,6 @@ int main(int argc, char **argv)
                 printf(main_help);
                 exit(1);
         }
-
-	parse_format(fmt);
 
 	// Read from stdin
 	while (1) {

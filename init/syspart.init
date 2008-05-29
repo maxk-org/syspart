@@ -1,95 +1,136 @@
 #!/bin/sh
 # Startup script for syspart
 #
-# chkconfig: 12345 00 99
+# chkconfig: 12345 0 99
 # description: Partition system resources
 
 # Source function library.
 . /etc/rc.d/init.d/functions
 
-#
-# Make sire we have bitops
-[ -f /usr/bin/bitops ] || exit 5
+# Init cpusets (mount, etc)
+if [ ! -d /dev/cpuset ]; then 
+	mkdir /dev/cpuset
+	if ! mount -l | grep -q /dev/cpuset; then 
+		mount -t cgroup -ocpuset cpuset /dev/cpuset
+	fi
+fi
+
+cd /dev/cpuset
+
+# The rest of the scripts assumes that current directory is 
+# the root of the cpuset tree
 
 # Get config.
 [ -f /etc/sysconfig/syspart ] || exit 5
-
 . /etc/sysconfig/syspart
 
-# Convert cpu list to hex mask
-DOM0_CPUS_MASK=`echo $DOM0_CPUS | bitops -d`
-DOM0_CPUS_LIST=$DOM0_CPUS
-DOM0_MEMS_LIST=$DOM0_MEMS
+# Compute masks based on the config
+# All cpus in the system
+ALL_CPUS_MASK=`cat cpuset.cpus | bitops --fmt=lX`
 
-# IRQ affinity
-setup_irq_affinity()
-{
-	# Set default IRQ affinity if supported
-	if [ -f /proc/irq/default_smp_affinity ]; then 
-		echo $DOM0_CPUS_MASK > /proc/irq/default_smp_affinity
-	fi
-	for i in /proc/irq/[0-9]*; do
-		echo $DOM0_CPUS_MASK > $i/smp_affinity 2>/dev/null
-	done
-}
+# PAR0 cpus and memory nodes
+PAR0_CPUS_MASK=`echo $PAR0_CPUS | bitops --fmt=lX`
+PAR0_CPUS_LIST=$PAR0_CPUS
+PAR0_MEMS_LIST=$PAR0_MEMS
+
+# PAR1 cpus
+PAR1_CPUS_MASK=`echo $ALL_CPUS_MASK | bitops --andnot $PAR0_CPUS_MASK`
+PAR1_EACH_CPU=`echo $PAR1_CPUS_MASK | bitops --fmt=xE`
 
 # Check if task is pinned to a single CPU
 task_not_pinned()
 {
-	[ `taskset -p $1 | cut -d: -f2 | bitops -w` -gt 1 ]
-}
-
-# Mount cpuset
-init_cpuset()
-{
-	if [ ! -d /dev/cpuset ]; then 
-		mkdir /dev/cpuset
-		if ! mount -l | grep -q /dev/cpuset; then 
-			mount -t cgroup -ocpuset cpuset /dev/cpuset
-		fi
-	fi
-
-	cd /dev/cpuset
+	a=`taskset -p $1 2>/dev/null` &&
+		[ `echo $a | cut -d: -f2 | bitops -w` -gt 1 ]
 }
 
 # Create cpusets and move all the tasks
-partition_cpus()
+create_partitions()
 {
-	init_cpuset
-
-	# Disable load balancing between cpusets
-	echo 0 > cpuset.sched_load_balance
-
-	# Create boot cpuset
-	if [ ! -d boot ]; then
-		mkdir boot
-		echo $DOM0_CPUS_LIST > boot/cpuset.cpus
-		echo $DOM0_MEMS_LIST > boot/cpuset.mems
-		echo 1 > boot/cpuset.cpu_exclusive
-		echo 1 > boot/cpuset.sched_load_balance
+	# Set default IRQ affinity if supported
+	if [ -f /proc/irq/default_smp_affinity ]; then 
+		echo $PAR0_CPUS_MASK > /proc/irq/default_smp_affinity
 	fi
 
-	# Move tasks
+	# Set affinity for all active IRQs
+	for i in /proc/irq/[0-9]*; do
+		echo $PAR0_CPUS_MASK > $i/smp_affinity 2>/dev/null
+	done
+
+	# Disable systemwide load balancing
+	echo 0 > cpuset.sched_load_balance
+
+	# Bring PAR1 cpus offline
+	for i in $PAR1_EACH_CPU; do
+		echo 0 > /sys/devices/system/cpu/cpu$i/online
+	done
+
+	# Create par0 cpuset
+	if [ ! -d par0 ]; then
+		mkdir par0
+		echo $PAR0_CPUS_LIST > par0/cpuset.cpus
+		echo $PAR0_MEMS_LIST > par0/cpuset.mems
+		echo 1 > par0/cpuset.cpu_exclusive
+	fi
+
+	# Move tasks into PAR0
 	for t in `cat tasks`; do
 		# Check if a task is pinned to a single CPU
 		if task_not_pinned $t; then
-			echo $t > boot/tasks
+			echo $t > par0/tasks 2>/dev/null
 		fi
+	done
+
+	# Bring PAR1 cpus online
+	for i in $PAR1_EACH_CPU; do
+		echo 1 > /sys/devices/system/cpu/cpu$i/online
+	done
+
+	# Enable balancing in PAR0.
+	# We do it as a last step to avoid redundant domain 
+	# rebuilds.
+	echo 1 > par0/cpuset.sched_load_balance
+}
+
+# Destory cpusets created for the system partitions
+destroy_partitions()
+{
+	if [ -d par0 ]; then 
+		# Move tasks to the root cpuset
+		for t in `cat par0/tasks`; do
+			echo $t > tasks 2>/dev/null
+		done
+
+		# Remove par0
+		rmdir par0
+	fi
+
+	# Enable systemwide balancing
+	echo 1 > cpuset.sched_load_balance
+
+	# Set default IRQ affinity if supported
+	if [ -f /proc/irq/default_smp_affinity ]; then 
+		echo $ALL_CPUS_MASK > /proc/irq/default_smp_affinity
+	fi
+
+	# Set affinity for all active IRQs
+	for i in /proc/irq/[0-9]*; do
+		echo $ALL_CPUS_MASK > $i/smp_affinity 2>/dev/null
 	done
 }
 
 start() {
-	# Move IRQs first
-	setup_irq_affinity
-
-	# Partition CPUs
-	partition_cpus
+	# Partition the system
+	create_partitions
 
 	RETVAL=0
 	return $RETVAL 
 }
 
 stop() {
+	# Revert all partitioning
+	destroy_partitions
+
 	RETVAL=0
 	return $RETVAL 
 }
