@@ -18,16 +18,6 @@ MAINTAINERCLEANFILES = Makefile.in aclocal.m4 configure \
 
 EXTRA_DIST = syspart.spec.in VERSION ChangeLog
 
-rpm:
-	rm -rf $(rpmbuild)
-	mkdir -p $(rpmdir)
-	make DESTDIR=$(rpmbuild) install
-	rpmbuild --buildroot=$(rpmbuild)     \
-		--define='_rpmdir $(rpmdir)' \
-		--define='_unpackaged_files_terminate_build 0' \
-		-bb libbones.spec
-	rm -rf $(rpmbuild)
-
 real-clean: maintainer-clean
 	find . -name Makefile.in | xargs rm
 	rm -rf include
