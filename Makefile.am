@@ -1,4 +1,4 @@
-SUBDIRS = bitops
+SUBDIRS = bitops init
 
 topsrc   = @abs_top_srcdir@
 rpmbuild = $(topsrc)/rpm-build

@@ -1,28 +1,33 @@
 # Note that this is NOT a relocatable package
 %define prefix @prefix@
 
-Summary: LibE1000 - Intel E1000 adapter library
-Name: libe1000
+Summary: System partitioning tools
+Name: syspart
 Version: @VERSION@
 Release: 2
-License: LGPL
+License: GPL
 Group: Applications/System
 Vendor: Max Krasnyansky
 Packager: Max Krasnyansky <maxk@qualcomm.com>
-Requires: glibc >= 2.2.4
 BuildRoot: %{prefix}
+source0: syspart-%{version}.tar.gz
 
 %description
-LibE1000 - Intel E1000 adapter library.
-User-space library and toools.
+Syspart is a set of tools for partitioning system resoures.
+CPUs, interrupt handling, etc.
+
+%prep
+%setup
+
+%build
+./configure && make
+
+%install
+make DESTDIR=%{buildroot} install
 
 %files
 %defattr(-, root, root)
 
-%{_libdir}/libe1000.*
-%{_libdir}/pkgconfig/libe1000.pc
-%{_includedir}/libe1000/e1000_defs.h
-%{_includedir}/libe1000/e1000_hw.h
-%{_includedir}/libe1000/e1000_lib.h
-%{prefix}/sbin/e1000config
-%{prefix}/sbin/e1000dump
+/etc/init.d/syspart
+/etc/sysconfig/syspart
+%{prefix}/bin/bitops
