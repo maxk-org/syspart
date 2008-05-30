@@ -7,22 +7,27 @@
 # Source function library.
 . /etc/rc.d/init.d/functions
 
+# Get config.
+[ -f /etc/sysconfig/syspart ] || exit 5
+. /etc/sysconfig/syspart
+
 # Init cpusets (mount, etc)
+if [ ! -f /proc/1/cpuset ]; then
+	echo CPUSETS support is not enabled
+	exit 1
+fi
+
 if [ ! -d /dev/cpuset ]; then 
 	mkdir /dev/cpuset
 	if ! mount -l | grep -q /dev/cpuset; then 
-		mount -t cgroup -ocpuset cpuset /dev/cpuset
+		mount -t cgroup -ocpuset cpuset /dev/cpuset || exit 1
 	fi
 fi
 
 cd /dev/cpuset
 
-# The rest of the scripts assumes that current directory is 
-# the root of the cpuset tree
-
-# Get config.
-[ -f /etc/sysconfig/syspart ] || exit 5
-. /etc/sysconfig/syspart
+# **** The rest of the script assumes that current directory is 
+# **** the root of the cpuset tree
 
 # Compute masks based on the config
 # All cpus in the system
@@ -36,13 +41,6 @@ PAR0_MEMS_LIST=$PAR0_MEMS
 # PAR1 cpus
 PAR1_CPUS_MASK=`echo $ALL_CPUS_MASK | bitops --andnot $PAR0_CPUS_MASK`
 PAR1_EACH_CPU=`echo $PAR1_CPUS_MASK | bitops --fmt=xE`
-
-# Check if task is pinned to a single CPU
-task_not_pinned()
-{
-	a=`taskset -p $1 2>/dev/null` &&
-		[ `echo $a | cut -d: -f2 | bitops -w` -gt 1 ]
-}
 
 # Create cpusets and move all the tasks
 create_partitions()
@@ -74,11 +72,28 @@ create_partitions()
 	fi
 
 	# Move tasks into PAR0
-	for t in `cat tasks`; do
-		# Check if a task is pinned to a single CPU
-		if task_not_pinned $t; then
-			echo $t > par0/tasks 2>/dev/null
+	cat /proc/[0-9]*/status 2>/dev/null |\
+	    awk '/Name/{n=$2; u=0} /^Pid:/{p=$2} /VmSize/{u=1} /Cpus/{print n,p,u,$2}' |\
+	while read name pid user cpus; do
+		# All user-space tasks move, no exceptions
+		if [ $user -eq 1 ]; then
+			echo $pid >par0/tasks 2>/dev/null
+			continue
 		fi
+
+		# Skip pinned down kernel threads
+		[ `echo $cpus | bitops -w` -eq 1 ] && continue
+
+		# Skip special kernel threads
+		case $name in
+		kthreadd)
+			# Do not move kthreadd
+			continue
+			;;
+		esac
+
+		# Move the rest
+		echo $pid >par0/tasks 2>/dev/null
 	done
 
 	# Bring PAR1 cpus online
@@ -97,9 +112,9 @@ destroy_partitions()
 {
 	if [ -d par0 ]; then 
 		# Move tasks to the root cpuset
-		for t in `cat par0/tasks`; do
+		while read t; do
 			echo $t > tasks 2>/dev/null
-		done
+		done < par0/tasks
 
 		# Remove par0
 		rmdir par0
@@ -119,17 +134,29 @@ destroy_partitions()
 	done
 }
 
-start() {
+start()
+{
+ 	echo -n $"Starting syspart: "
+
 	# Partition the system
 	create_partitions
 
+	success $"syspart"
+	echo 
+
 	RETVAL=0
-	return $RETVAL 
+	return $RETVAL
 }
 
-stop() {
-	# Revert all partitioning
+stop()
+{
+ 	echo -n $"Stopping syspart: "
+
+	# Revert the partitioning
 	destroy_partitions
+
+	success $"syspart"
+	echo
 
 	RETVAL=0
 	return $RETVAL 
