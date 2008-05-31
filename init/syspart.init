@@ -42,6 +42,36 @@ PAR0_MEMS_LIST=$PAR0_MEMS
 PAR1_CPUS_MASK=`echo $ALL_CPUS_MASK | bitops --andnot $PAR0_CPUS_MASK`
 PAR1_EACH_CPU=`echo $PAR1_CPUS_MASK | bitops --fmt=xE`
 
+# Move tasks into a cpuset
+move_tasks()
+{
+	par=$1
+
+	cat /proc/[0-9]*/status 2>/dev/null |\
+	    awk '/Name/{n=$2; u=0} /^Pid:/{p=$2} /VmSize/{u=1} /Cpus/{print n,p,u,$2}' |\
+	while read name pid user cpus; do
+		# All user-space tasks move, no exceptions
+		if [ $user -eq 1 ]; then
+			echo $pid > $par/tasks 2>/dev/null
+			continue
+		fi
+
+		# Skip pinned down kernel threads
+		[ `echo $cpus | bitops -w` -eq 1 ] && continue
+
+		# Skip special kernel threads
+		case $name in
+		kthreadd)
+			# Do not move kthreadd
+			continue
+			;;
+		esac
+
+		# Move the rest
+		echo $pid > $par/tasks 2>/dev/null
+	done
+}
+
 # Create cpusets and move all the tasks
 create_partitions()
 {
@@ -72,29 +102,7 @@ create_partitions()
 	fi
 
 	# Move tasks into PAR0
-	cat /proc/[0-9]*/status 2>/dev/null |\
-	    awk '/Name/{n=$2; u=0} /^Pid:/{p=$2} /VmSize/{u=1} /Cpus/{print n,p,u,$2}' |\
-	while read name pid user cpus; do
-		# All user-space tasks move, no exceptions
-		if [ $user -eq 1 ]; then
-			echo $pid >par0/tasks 2>/dev/null
-			continue
-		fi
-
-		# Skip pinned down kernel threads
-		[ `echo $cpus | bitops -w` -eq 1 ] && continue
-
-		# Skip special kernel threads
-		case $name in
-		kthreadd)
-			# Do not move kthreadd
-			continue
-			;;
-		esac
-
-		# Move the rest
-		echo $pid >par0/tasks 2>/dev/null
-	done
+	[ "$PAR0_MOVE_TASKS" == "true" ] && move_tasks par0
 
 	# Bring PAR1 cpus online
 	for i in $PAR1_EACH_CPU; do
