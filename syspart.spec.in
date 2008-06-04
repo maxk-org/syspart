@@ -29,5 +29,5 @@ make DESTDIR=%{buildroot} install
 %defattr(-, root, root)
 
 /etc/init.d/syspart
-/etc/sysconfig/syspart
+%config /etc/sysconfig/syspart
 %{prefix}/bin/bitops

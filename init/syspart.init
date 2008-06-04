@@ -105,7 +105,15 @@ move_percpu_tasks()
 # Create cpusets and move all the tasks
 create_partitions()
 {
-	# Set default IRQ affinity if supported
+	# Do not start twice to avoid conflicts.
+	# For example we do not want to bring CPUs on/offline 
+	# if stopmachine is disabled on them.
+	if [ -d par0 ]; then 
+		echo System partitioning is already setup
+		return 1
+	fi
+
+	# Set default IRQ affinity ti PAR0 cpus (if supported)
 	if [ -f /proc/irq/default_smp_affinity ]; then 
 		echo $PAR0_CPUS_MASK > /proc/irq/default_smp_affinity
 	fi
@@ -140,6 +148,11 @@ create_partitions()
 		move_percpu_tasks $i par0
 	done
 
+	# Restrict stopmachine to PAR0 cpus (if supported)
+	if [ -f /proc/sys/kernel/stopmachine_cpus ]; then 
+		echo $PAR0_CPUS_MASK > /proc/sys/kernel/stopmachine_cpus
+	fi
+
 	# Enable balancing in PAR0.
 	# We do it as a last step to avoid redundant domain 
 	# rebuilds.
@@ -149,6 +162,11 @@ create_partitions()
 # Destory cpusets created for the system partitions
 destroy_partitions()
 {
+	# Unrestrict stopmachine (if supported)
+	if [ -f /proc/sys/kernel/stopmachine_cpus ]; then 
+		echo $ALL_CPUS_MASK > /proc/sys/kernel/stopmachine_cpus
+	fi
+
 	if [ -d par0 ]; then 
 		# Move tasks to the root cpuset
 		while read t; do
