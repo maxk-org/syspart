@@ -72,6 +72,36 @@ move_tasks()
 	done
 }
 
+# Move per cpu kernel tasks to the specified partition
+move_percpu_tasks()
+{
+	cpumask=`echo $1 | bitops --fmt lX`
+	par=$2
+
+	cat /proc/[0-9]*/status 2>/dev/null |\
+	    awk '/Name/{n=$2; u=0} /^Pid:/{p=$2} /VmSize/{u=1} /Cpus/{print n,p,u,$2}' |\
+	while read name pid user cpus; do
+		# Skip user-space tasks
+		[ $user -eq 1 ] && continue
+
+		# Skip threads not pinned to this cpu
+		[ "$cpus" != "$cpumask" ] && continue
+
+		# Skip special kernel threads
+		case $name in
+		ksoftirqd*)
+			continue
+			;;
+		migration*)
+			continue
+			;;
+		esac
+
+		# Move the rest
+		echo $pid > $par/tasks 2>/dev/null
+	done
+}
+
 # Create cpusets and move all the tasks
 create_partitions()
 {
@@ -107,6 +137,7 @@ create_partitions()
 	# Bring PAR1 cpus online
 	for i in $PAR1_EACH_CPU; do
 		echo 1 > /sys/devices/system/cpu/cpu$i/online
+		move_percpu_tasks $i par0
 	done
 
 	# Enable balancing in PAR0.
