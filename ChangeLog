@@ -1,0 +1,4 @@
+Version 0.6:
+   First public release.
+   Supports two system partitions. par0 (general purpose) and
+   par1 (hard realtime).
