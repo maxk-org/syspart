@@ -102,7 +102,7 @@ move_percpu_tasks()
 	done
 }
 
-# Create cpusets and move all the tasks
+# Create cpusets
 create_partitions()
 {
 	# Do not start twice to avoid conflicts.

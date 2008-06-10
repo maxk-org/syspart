@@ -1,3 +1,13 @@
-FIXME
+syspart (system partitioning) is a set of scripts for partitioning Linux systems
+into domains (partitions) that can be used for different purposes. For example 
+one partition can be used for the general purpose tasks and another for the
+hard realtime applications.
 
-See Doxygen generated documentation.
+Currently only two partitions are supporte: par0 and par1.
+par0 is setup for running general purpose tasks, handling interrupts, etc. 
+par1 is setup for running hard-rt tasks. CPUs in par1 are completely isolated.
+
+See /etc/sysconfig/syspart for more details.
+
+Do not forget to enable syspart service after installing this package.
+	/sbin/chkconfig syspart on
