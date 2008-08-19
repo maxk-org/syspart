@@ -20,6 +20,7 @@ CPUs, interrupt handling, etc.
 %setup
 
 %build
+./bootstrap
 ./configure && make
 
 %install
