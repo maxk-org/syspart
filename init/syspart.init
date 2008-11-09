@@ -12,11 +12,6 @@
 . /etc/sysconfig/syspart
 
 # Init cpusets (mount, etc)
-if [ ! -f /proc/1/cpuset ]; then
-	echo CPUSETS support is not enabled
-	exit 1
-fi
-
 if [ ! -d /dev/cpuset ]; then
 	mkdir /dev/cpuset
 	if ! mount -l | grep -q /dev/cpuset; then 
