@@ -1,22 +1,15 @@
-# partition-0 (par0) - handles general kernel and user tasks, interrupts, etc.
-# partition-1 (par1) - contains isolated cpus.
-
-# CPUs to assign to par0.
-# In the example below CPU0,CPU1,CPU2,CPU3 will be assigned 
-# to par0. 
-# Note: All other CPUs in the system will be automatically 
-#       put into par1.
+# Partition0 (PAR0) - handles general kernel and user tasks, interrupts, etc.
 PAR0_CPUS="0-3"
-
-# Memmory nodes to assign to par0.
 PAR0_MEMS="0"
 
+# CPUs not assigned to PAR0 are isolated
+
 # By default syspart simply disables system wide loadbalancing
-# without actually moving all tasks into par0. It can also move 
-# all user-space and unpinned kernel tasks into par0 if needed.
+# without actually moving all tasks into a specific partition.
+# It can also move all user-space and unpinned kernel tasks into 
+# PAR0 if needed.
 #
-# Note: If PAR0_MOVE_TASKS is enabled in order to run on CPUs
-# from par1 applications have to explicitly move into the 'root' 
-# cpuset: 
-#     echo $$ > /dev/cpuset/tasks
-PAR0_MOVE_TASKS=false
+# Note: If MOVE_TASKS is enabled in order to use isolated CPUs
+# applications have to explicitly move into the 'root' cpuset:
+#     echo $$ > /cpusets/tasks
+MOVE_TASKS=no

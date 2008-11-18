@@ -12,14 +12,16 @@
 . /etc/sysconfig/syspart
 
 # Init cpusets (mount, etc)
-if [ ! -d /dev/cpuset ]; then
-	mkdir /dev/cpuset
-	if ! mount -l | grep -q /dev/cpuset; then 
-		mount -t cgroup -ocpuset cpuset /dev/cpuset || exit 1
+if [ ! -d /cpusets ]; then
+	mkdir /cpusets
+	if ! mount -l | grep -q /cpusets; then 
+		mount -t cgroup -ocpuset cpuset /cpusets || exit 1
 	fi
 fi
 
-cd /dev/cpuset
+SYSCTL="/sbin/sysctl -e -w"
+
+cd /cpusets
 
 # **** The rest of the script assumes that current directory is 
 # **** the root of the cpuset tree
@@ -33,9 +35,10 @@ PAR0_CPUS_MASK=`echo $PAR0_CPUS | bitops --fmt=lX`
 PAR0_CPUS_LIST=$PAR0_CPUS
 PAR0_MEMS_LIST=$PAR0_MEMS
 
-# PAR1 cpus
+# PAR1 cpus and memory nodes
 PAR1_CPUS_MASK=`echo $ALL_CPUS_MASK | bitops --andnot $PAR0_CPUS_MASK`
 PAR1_EACH_CPU=`echo $PAR1_CPUS_MASK | bitops --fmt=xE`
+PAR1_MEMS_LIST=$PAR1_MEMS
 
 # Move tasks into a cpuset
 move_tasks()
@@ -108,7 +111,7 @@ create_partitions()
 		return 1
 	fi
 
-	# Set default IRQ affinity ti PAR0 cpus (if supported)
+	# Set default IRQ affinity to PAR0 cpus (if supported)
 	if [ -f /proc/irq/default_smp_affinity ]; then 
 		echo $PAR0_CPUS_MASK > /proc/irq/default_smp_affinity
 	fi
@@ -135,7 +138,7 @@ create_partitions()
 	fi
 
 	# Move tasks into PAR0
-	[ "$PAR0_MOVE_TASKS" == "true" ] && move_tasks par0
+	[ "$MOVE_TASKS" == "true" ] && move_tasks par0
 
 	# Bring PAR1 cpus online
 	for i in $PAR1_EACH_CPU; do
@@ -144,12 +147,20 @@ create_partitions()
 	done
 
 	# Restrict stopmachine to PAR0 cpus (if supported)
-	if [ -f /proc/sys/kernel/stopmachine_cpus ]; then 
-		echo $PAR0_CPUS_MASK > /proc/sys/kernel/stopmachine_cpus
-	fi
+	$SYSCTL "kernel.stopmachine_cpumask=$PAR0_CPUS_MASK"
+
+	# Restrict pagedrain to PAR0 cpus (if supported)
+	$SYSCTL "vm.pagedrain_cpumask=$PAR0_CPUS_MASK"
+
+	# Disable scheduler RT throttling 
+	$SYSCTL "kernel.sched_rt_runtime_us=-1"
+
+	# Disable softlockup detection.
+	# Ideally this should be a cpumask 
+	$SYSCTL "kernel.softlockup_thresh=-1"
 
 	# Enable balancing in PAR0.
-	# We do it as a last step to avoid redundant domain 
+	# We do it as the last step to avoid redundant domain 
 	# rebuilds.
 	echo 1 > par0/cpuset.sched_load_balance
 }
@@ -158,8 +169,8 @@ create_partitions()
 destroy_partitions()
 {
 	# Unrestrict stopmachine (if supported)
-	if [ -f /proc/sys/kernel/stopmachine_cpus ]; then 
-		echo $ALL_CPUS_MASK > /proc/sys/kernel/stopmachine_cpus
+	if [ -f /proc/sys/kernel/stopmachine_cpumask ]; then 
+		echo $ALL_CPUS_MASK > /proc/sys/kernel/stopmachine_cpumask
 	fi
 
 	if [ -d par0 ]; then 
