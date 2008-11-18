@@ -19,7 +19,7 @@ if [ ! -d /cpusets ]; then
 	fi
 fi
 
-SYSCTL="/sbin/sysctl -e -w"
+SYSCTL="/sbin/sysctl -q -e -w"
 
 cd /cpusets
 
@@ -169,9 +169,16 @@ create_partitions()
 destroy_partitions()
 {
 	# Unrestrict stopmachine (if supported)
-	if [ -f /proc/sys/kernel/stopmachine_cpumask ]; then 
-		echo $ALL_CPUS_MASK > /proc/sys/kernel/stopmachine_cpumask
-	fi
+	$SYSCTL "kernel.stopmachine_cpumask=$ALL_CPUS_MASK"
+
+	# Unrestrict pagedrain (if supported)
+	$SYSCTL "vm.pagedrain_cpumask=$ALL_CPUS_MASK"
+
+	# Enable scheduler RT throttling
+	$SYSCTL "kernel.sched_rt_runtime_us=950000"
+
+	# Enable softlockup detection
+	$SYSCTL "kernel.softlockup_thresh=60"
 
 	if [ -d par0 ]; then 
 		# Move tasks to the root cpuset
