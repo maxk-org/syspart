@@ -12,11 +12,9 @@
 . /etc/sysconfig/syspart
 
 # Init cpusets (mount, etc)
-if [ ! -d /cpusets ]; then
-	mkdir /cpusets
-	if ! mount -l | grep -q /cpusets; then 
-		mount -t cgroup -ocpuset cpuset /cpusets || exit 1
-	fi
+[ -d /cpusets ] || mkdir /cpusets
+if ! mount -l | grep -q /cpusets; then
+	mount -t cgroup -ocpuset cpuset /cpusets || exit 1
 fi
 
 SYSCTL="/sbin/sysctl -q -e -w"
@@ -134,16 +132,21 @@ create_partitions()
 		mkdir par0
 		echo $PAR0_CPUS_LIST > par0/cpuset.cpus
 		echo $PAR0_MEMS_LIST > par0/cpuset.mems
-		echo 1 > par0/cpuset.cpu_exclusive
+		echo 0 > par0/cpuset.sched_load_balance
 	fi
 
 	# Move tasks into PAR0
 	[ "$MOVE_TASKS" == "true" ] && move_tasks par0
 
-	# Bring PAR1 cpus online
+	# Bring PAR1 cpus online.
+	# Put each CPU into a separate cpuset, otherwise they 
+	# endup in the same root domain which causes rt scheduler
+	# lock contention.
 	for i in $PAR1_EACH_CPU; do
 		echo 1 > /sys/devices/system/cpu/cpu$i/online
-		move_percpu_tasks $i par0
+		mkdir cpu$i
+		echo $i > cpu$i/cpuset.cpus
+		# move_percpu_tasks $i par0
 	done
 
 	# Restrict stopmachine to PAR0 cpus (if supported)
@@ -189,6 +192,11 @@ destroy_partitions()
 		# Remove par0
 		rmdir par0
 	fi
+
+	# Remove per cpu cpusets
+	for i in $PAR1_EACH_CPU; do
+		[ -d cpu$i ] && rmdir cpu$i
+	done
 
 	# Enable systemwide balancing
 	echo 1 > cpuset.sched_load_balance
