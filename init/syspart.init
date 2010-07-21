@@ -149,8 +149,8 @@ create_partitions()
 		# move_percpu_tasks $i par0
 	done
 
-	# Restrict stopmachine to PAR0 cpus (if supported)
-	$SYSCTL "kernel.stopmachine_cpumask=$PAR0_CPUS_MASK"
+	# Disable stopmachine (if supported)
+	$SYSCTL "kernel.stopmachine_disabled=1"
 
 	# Restrict pagedrain to PAR0 cpus (if supported)
 	$SYSCTL "vm.pagedrain_cpumask=$PAR0_CPUS_MASK"
@@ -171,8 +171,8 @@ create_partitions()
 # Destory cpusets created for the system partitions
 destroy_partitions()
 {
-	# Unrestrict stopmachine (if supported)
-	$SYSCTL "kernel.stopmachine_cpumask=$ALL_CPUS_MASK"
+	# Enable stopmachine (if supported)
+	$SYSCTL "kernel.stopmachine_disabled=0"
 
 	# Unrestrict pagedrain (if supported)
 	$SYSCTL "vm.pagedrain_cpumask=$ALL_CPUS_MASK"
