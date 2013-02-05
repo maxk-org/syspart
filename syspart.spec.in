@@ -4,8 +4,13 @@
 Summary: System partitioning tools
 Name: syspart
 Version: @VERSION@
-Release: 2
+<<<<<<< HEAD
+Release: 3
 License: BSD 2-clause
+=======
+Release: 4
+License: GPL
+>>>>>>> bbab498... Cleaning up move_tasks to correct parsing of CPU mask
 Group: Applications/System
 Vendor: Max Krasnyansky
 Packager: Max Krasnyansky <max.krasnyansky@gmail.com>
@@ -30,5 +35,6 @@ make DESTDIR=%{buildroot} install
 %defattr(-, root, root)
 
 /etc/init.d/syspart
+/usr/lib/systemd/system/syspart.service
 %config /etc/sysconfig/syspart
 %{prefix}/bin/bitops

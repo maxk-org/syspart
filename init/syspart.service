@@ -1,0 +1,11 @@
+[Unit]
+Description=Partition system resources
+
+[Service]
+Type=oneshot
+ExecStart=/etc/init.d/syspart start
+ExecStop=/etc/init.d/syspart stop
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
