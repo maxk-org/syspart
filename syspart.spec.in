@@ -4,7 +4,7 @@
 Summary: System partitioning tools
 Name: syspart
 Version: @VERSION@
-Release: 2
+Release: 3
 License: GPL
 Group: Applications/System
 Vendor: Max Krasnyansky
@@ -30,5 +30,6 @@ make DESTDIR=%{buildroot} install
 %defattr(-, root, root)
 
 /etc/init.d/syspart
+/usr/lib/systemd/system/syspart.service
 %config /etc/sysconfig/syspart
 %{prefix}/bin/bitops
