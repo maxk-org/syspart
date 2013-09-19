@@ -44,7 +44,7 @@ move_tasks()
 	par=$1
 
 	cat /proc/[0-9]*/status 2>/dev/null |\
-	    awk '/Name/{n=$2; u=0} /^Pid:/{p=$2} /VmSize/{u=1} /Cpus/{print n,p,u,$2}' |\
+	    awk '/Name/{n=$2; u=0} /^Pid:/{p=$2} /VmSize/{u=1} /Cpus_allowed:/{print n,p,u,$2}' |\
 	while read name pid user cpus; do
 		# All user-space tasks move, no exceptions
 		if [ $user -eq 1 ]; then
@@ -53,7 +53,7 @@ move_tasks()
 		fi
 
 		# Skip pinned down kernel threads
-		[ `echo $cpus | bitops -w` -eq 1 ] && continue
+                [ `echo $cpus | bitops -w` -eq 1 ] && { echo "Skipping ${name}[$pid] already pinned to use cpus=$cpus"; continue; }
 
 		# Skip special kernel threads
 		case $name in

@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/bash
 
 # Everything is relative to the working directory
 cd $(dirname $0)
