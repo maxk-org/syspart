@@ -1,5 +1,6 @@
 [Unit]
 Description=Partition system resources
+After=network.target network-online.target rc-local.service
 
 [Service]
 Type=oneshot
@@ -8,4 +9,4 @@ ExecStop=/etc/init.d/syspart stop
 RemainAfterExit=yes
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target multi-user.target

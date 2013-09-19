@@ -48,7 +48,7 @@ move_tasks()
 	while read name pid user cpus; do
 		# All user-space tasks move, no exceptions
 		if [ $user -eq 1 ]; then
-			echo $pid > $par/tasks 2>/dev/null
+			echo $pid > $par/cgroup.procs 2>/dev/null
 			continue
 		fi
 
@@ -64,7 +64,7 @@ move_tasks()
 		esac
 
 		# Move the rest
-		echo $pid > $par/tasks 2>/dev/null
+		echo $pid > $par/cgroup.procs 2>/dev/null
 	done
 }
 
@@ -94,7 +94,7 @@ move_percpu_tasks()
 		esac
 
 		# Move the rest
-		echo $pid > $par/tasks 2>/dev/null
+		echo $pid > $par/cgroup.procs 2>/dev/null
 	done
 }
 
@@ -187,7 +187,7 @@ destroy_partitions()
 		# Move tasks to the root cpuset
 		while read t; do
 			echo $t > tasks 2>/dev/null
-		done < par0/tasks
+		done < par0/cgroup.procs
 
 		# Remove par0
 		rmdir par0

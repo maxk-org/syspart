@@ -4,13 +4,8 @@
 Summary: System partitioning tools
 Name: syspart
 Version: @VERSION@
-<<<<<<< HEAD
-Release: 3
+Release: 6
 License: BSD 2-clause
-=======
-Release: 4
-License: GPL
->>>>>>> bbab498... Cleaning up move_tasks to correct parsing of CPU mask
 Group: Applications/System
 Vendor: Max Krasnyansky
 Packager: Max Krasnyansky <max.krasnyansky@gmail.com>
