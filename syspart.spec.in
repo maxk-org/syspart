@@ -4,7 +4,7 @@
 Summary: System partitioning tools
 Name: syspart
 Version: @VERSION@
-Release: 5
+Release: 6
 License: GPL
 Group: Applications/System
 Vendor: Max Krasnyansky
