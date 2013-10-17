@@ -4,8 +4,10 @@ install-exec-local:
 	$(INSTALL) -D -m 755 syspart.init $(DESTDIR)/etc/init.d/syspart
 	$(INSTALL) -D -m 644 syspart.sysconf $(DESTDIR)/etc/sysconfig/syspart
 	$(INSTALL) -D -m 644 syspart.service $(DESTDIR)/usr/lib/systemd/system/syspart.service
+	$(INSTALL) -D -m 644 syspart.functions $(DESTDIR)/etc/profile.d/syspart.sh
 
 uninstall-local:
 	rm $(DESTDIR)/etc/init.d/syspart
 	rm $(DESTDIR)/etc/sysconfig/syspart
 	rm $(DESTDIR)/usr/lib/systemd/system
+	rm $(DESTDIR)/etc/profile.d/syspart.sh
