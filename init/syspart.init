@@ -136,7 +136,7 @@ create_partitions()
 	fi
 
 	# Move tasks into PAR0
-	[ "$MOVE_TASKS" == "true" ] && move_tasks par0
+	[ "$MOVE_TASKS" == "true" ] && { move_tasks par0; echo "Re-running move_tasks"; move_tasks par0; }
 
 	# Bring PAR1 cpus online.
 	# Put each CPU into a separate cpuset, otherwise they 
