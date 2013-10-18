@@ -1,3 +1,4 @@
+# -*- mode:sh -*-
 # Helper functions when dealing with syspart'ed system
 
 # Helps show which processes are still in the root cpuset and which have
@@ -10,12 +11,15 @@ comm_cpusets() {
     IFS='
 '
     TAB=$(printf "\t")
-    comm --nocheck-order -3 <(sort -n $set1) <(sort -n $set2) | \
+    sort -n $set1 > /tmp/.set1_$$
+    sort -n $set2 > /tmp/.set2_$$
+    comm --nocheck-order -3 /tmp/.set1_$$ /tmp/.set2_$$ | \
         while read line; do
         echo -n "$line - "
         ps --no-headers -o args -p ${line##${TAB}}
     done
     IFS=$ORIG_IFS
+    /bin/rm /tmp/.set*_$$
 }
 
 # Watch for new kernel threads to be spawned.
