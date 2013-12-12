@@ -11,15 +11,17 @@
 [ -f /etc/sysconfig/syspart ] || exit 5
 . /etc/sysconfig/syspart
 
-# Init cpusets (mount, etc)
-[ -d /cpusets ] || mkdir /cpusets
-if ! mount -l | grep -q /cpusets; then
-	mount -t cgroup -ocpuset cpuset /cpusets || exit 1
+# Init cpusets
+cpusetdir=/sys/fs/cgroup/cpuset
+
+if [ ! -d $cpusetdir -o ! -f $cpusetdir/cpuset.cpus ]; then
+	echo $cpusetdir does not exist or cpuset fs is not mounted
+	exit 1
 fi
 
 SYSCTL="/sbin/sysctl -q -e -w"
 
-cd /cpusets
+cd $cpusetdir
 
 # **** The rest of the script assumes that current directory is 
 # **** the root of the cpuset tree
