@@ -1,15 +1,10 @@
-# Partition0 (PAR0) - handles general kernel and user tasks, interrupts, etc.
-PAR0_CPUS="0-3"
-PAR0_MEMS="0"
+# GPP (general purpose partition) - handles general kernel and user tasks, interrupts, etc.
+# ISP (isolated partition) - includes all isolated CPUs
 
-# CPUs not assigned to PAR0 are isolated
+GPP_CPUS="0-1" # List of CPUS assigned to GPP
+GPP_MEMS="0"   # List of memory nodes assigned to GPP
 
-# By default syspart simply disables system wide loadbalancing
-# without actually moving all tasks into a specific partition.
-# It can also move all user-space and unpinned kernel tasks into 
-# PAR0 if needed.
-#
-# Note: If MOVE_TASKS is enabled in order to use isolated CPUs
-# applications have to explicitly move into the 'root' cpuset:
-#     echo $$ > /cpusets/tasks
-MOVE_TASKS=no
+ISP_CPUS=""    # List of CPUS assigned to ISP. If empty includes all CPUs not assigned to GPP
+ISP_MEMS="0"   # List of memory nodes assigned to ISP
+
+# Memory nodes can and are shared between GPP and ISP
