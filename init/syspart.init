@@ -47,13 +47,12 @@ ISP_MEMS_LIST=$ISP_MEMS
 # Move tasks into a cpuset
 move_tasks()
 {
+	# Try to move all tasks.
+	# Those that can't be moved (per-cpu kernel threads, etc) won't move
+	# whether we want to or not, no need to be careful here.
 	par=$1
-	cat /proc/[0-9]*/status 2>/dev/null |\
-	    awk '/Name/{n=$2; u=0} /^Pid:/{p=$2}' |\
-	while read name pid; do
-		# Try to move all tasks.
-		# Those that can't be moved (per-cpu kernel threads, etc) won't move
-		# whether we want to or not, no need to be careful here.
+	ls -d /proc/[0-9]* | while read i; do
+		pid=${i##*/}
 		echo $pid > $par/cgroup.procs 2>/dev/null
 	done
 }
@@ -147,7 +146,7 @@ destroy_partitions()
 		# Move tasks to the root cpuset
 		while read t; do
 			echo $t > tasks 2>/dev/null
-		done < gpp/cgroup.procs
+		done < gpp/tasks
 
 		# Remove gpp
 		rmdir gpp
