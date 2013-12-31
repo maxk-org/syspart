@@ -57,6 +57,18 @@ move_tasks()
 	done
 }
 
+# Some of the kernel threads can't be moved into non-root cpuset but their cpumask
+# can still be changed.  
+update_rootset_cpumask()
+{
+	mask=$1
+
+	# Iterate over tasks in root cpuset and try to set their cpu affinity masks
+	for i in `cat tasks`; do
+		taskset -p $mask $i 2>/dev/null
+	done
+}
+
 # Create cpusets
 create_partitions()
 {
@@ -74,6 +86,11 @@ create_partitions()
 	# Set affinity for all active IRQs
 	for i in /proc/irq/[0-9]*; do
 		echo $GPP_CPUS_MASK > $i/smp_affinity 2>/dev/null
+	done
+
+	# Constrain unbounded workqueues to GPP cpus
+	for i in /sys/bus/workqueue/devices/*; do 
+		[ -f $i/cpumask ] && echo $GPP_CPUS_MASK > $i/cpumask
 	done
 
 	# Disable systemwide load balancing
@@ -96,6 +113,7 @@ create_partitions()
 	move_tasks gpp
 	echo "Re-running move_tasks"
 	move_tasks gpp
+	update_rootset_cpumask $GPP_CPUS_MASK
 
 	# Bring ISP cpus online.
 	# Put each CPU into a separate cpuset, otherwise they 
@@ -143,6 +161,8 @@ destroy_partitions()
 	$SYSCTL "kernel.softlockup_thresh=60"
 
 	if [ -d gpp ]; then 
+		update_rootset_cpumask $ALL_CPUS_MASK
+
 		# Move tasks to the root cpuset
 		while read t; do
 			echo $t > tasks 2>/dev/null
@@ -159,6 +179,11 @@ destroy_partitions()
 
 	# Enable systemwide balancing
 	echo 1 > cpuset.sched_load_balance
+
+	# UnConstrain unbounded workqueues to GPP cpus
+	for i in /sys/bus/workqueue/devices/*; do 
+		[ -f $i/cpumask ] && echo $ALL_CPUS_MASK > $i/cpumask
+	done
 
 	# Set default IRQ affinity
 	echo $ALL_CPUS_MASK > /proc/irq/default_smp_affinity
