@@ -30,8 +30,8 @@ cd $cpusetdir
 ALL_CPUS_MASK=`cat cpuset.cpus | bitops --fmt=lX`
 
 # Backwards compatibility
-[ "$GPP_CPUS" = ""] && GPP_CPUS=$PAR0_CPUS
-[ "$GPP_MEMS" = ""] && GPP_MEMS=$PAR0_MEMS
+[ "$GPP_CPUS" = "" ] && GPP_CPUS=$PAR0_CPUS
+[ "$GPP_MEMS" = "" ] && GPP_MEMS=$PAR0_MEMS
 
 # GPP cpus and memory nodes
 GPP_CPUS_MASK=`echo $GPP_CPUS | bitops --fmt=lX`
@@ -53,8 +53,8 @@ move_tasks()
 	par=$1
 	ls -d /proc/[0-9]* | while read i; do
 		pid=${i##*/}
-		echo $pid > $par/cgroup.procs 2>/dev/null
-	done
+		echo $pid >$par/cgroup.procs
+	done 2>/dev/null
 }
 
 # Some of the kernel threads can't be moved into non-root cpuset but their cpumask
@@ -65,7 +65,7 @@ update_rootset_cpumask()
 
 	# Iterate over tasks in root cpuset and try to set their cpu affinity masks
 	for i in `cat tasks`; do
-		taskset -p $mask $i 2>/dev/null
+		taskset -p $mask $i &>/dev/null
 	done
 }
 
@@ -108,6 +108,9 @@ create_partitions()
 		echo $GPP_MEMS_LIST > gpp/cpuset.mems
 		echo 0 > gpp/cpuset.sched_load_balance
 	fi
+
+	# Set default kthread cpumask to GPP cpus (if supported)
+	$SYSCTL "kernel.default_kthread_cpumask=$GPP_CPUS_MASK"
 
 	# Move tasks into GPP
 	move_tasks gpp
@@ -159,6 +162,9 @@ destroy_partitions()
 
 	# Enable softlockup detection
 	$SYSCTL "kernel.softlockup_thresh=60"
+
+	# Set default kthread cpumask to GPP cpus (if supported)
+	$SYSCTL "kernel.default_kthread_cpumask=$ALL_CPUS_MASK"
 
 	if [ -d gpp ]; then 
 		update_rootset_cpumask $ALL_CPUS_MASK
