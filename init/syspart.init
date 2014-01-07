@@ -76,7 +76,7 @@ move_tasks()
 		if [ $userspace -eq 1 ]; then
 			echo $pid >$cpuset/cgroup.procs
 		else
-			taskset -p $mask $pid #&>/dev/null
+			taskset -p $mask $pid &>/dev/null
 		fi
 	done 2>/dev/null
 }
