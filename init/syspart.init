@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Startup script for syspart
 #
 # chkconfig: 12345 90 99
@@ -44,29 +44,41 @@ GPP_MEMS_LIST=$GPP_MEMS
 ISP_EACH_CPU=`echo $ISP_CPUS_MASK | bitops --fmt=xE`
 ISP_MEMS_LIST=$ISP_MEMS
 
-# Move tasks into a cpuset
+# Move tasks into the specified partition.
+#  $1 - cpuset name (. for root)
+#  $2 - cpumask
+# Userspace tasks are moved into the apropriate cpuset.
+# Kernel tasks simply get their cpumask adjusted because 
+# most kernel threads are ignored by cpusets anyways.
 move_tasks()
 {
-	# Try to move all tasks.
-	# Those that can't be moved (per-cpu kernel threads, etc) won't move
-	# whether we want to or not, no need to be careful here.
-	par=$1
-	ls -d /proc/[0-9]* | while read i; do
-		pid=${i##*/}
-		echo $pid >$par/cgroup.procs
+	cpuset=$1
+	mask=$2
+
+	[ $cpuset = / ] && cpuset=.
+
+	# Set default kthread cpumask (if supported)
+	$SYSCTL "kernel.default_kthread_cpumask=$GPP_CPUS_MASK"
+
+	# Iterate over all tasks in the system
+	for p in /proc/[0-9]*; do
+		mapfile -t stat <$p/status || continue
+
+		pid=
+		userspace=0
+		for ((i=0; i < ${#stat[*]}; i++)); do
+			case ${stat[$i]} in
+				Pid:*)    pid=${stat[$i]/*:/}  ;;
+				VmSize:*) userspace=1          ;;
+			esac
+		done
+
+		if [ $userspace -eq 1 ]; then
+			echo $pid >$cpuset/cgroup.procs
+		else
+			taskset -p $mask $pid #&>/dev/null
+		fi
 	done 2>/dev/null
-}
-
-# Some of the kernel threads can't be moved into non-root cpuset but their cpumask
-# can still be changed.  
-update_rootset_cpumask()
-{
-	mask=$1
-
-	# Iterate over tasks in root cpuset and try to set their cpu affinity masks
-	for i in `cat tasks`; do
-		taskset -p $mask $i &>/dev/null
-	done
 }
 
 # Create cpusets
@@ -109,14 +121,8 @@ create_partitions()
 		echo 0 > gpp/cpuset.sched_load_balance
 	fi
 
-	# Set default kthread cpumask to GPP cpus (if supported)
-	$SYSCTL "kernel.default_kthread_cpumask=$GPP_CPUS_MASK"
-
 	# Move tasks into GPP
-	move_tasks gpp
-	echo "Re-running move_tasks"
-	move_tasks gpp
-	update_rootset_cpumask $GPP_CPUS_MASK
+	move_tasks gpp $GPP_CPUS_MASK
 
 	# Bring ISP cpus online.
 	# Put each CPU into a separate cpuset, otherwise they 
@@ -128,6 +134,10 @@ create_partitions()
 		echo $i > cpu$i/cpuset.cpus
 		echo $ISP_MEMS_LIST > cpu$i/cpuset.mems
 	done
+
+	# Move any tasks that might have started/changed due to
+	# CPU onlining.
+	move_tasks gpp $GPP_CPUS_MASK
 
 	# Disable stopmachine (if supported)
 	$SYSCTL "kernel.stopmachine_disabled=1"
@@ -163,16 +173,8 @@ destroy_partitions()
 	# Enable softlockup detection
 	$SYSCTL "kernel.softlockup_thresh=60"
 
-	# Set default kthread cpumask to GPP cpus (if supported)
-	$SYSCTL "kernel.default_kthread_cpumask=$ALL_CPUS_MASK"
-
 	if [ -d gpp ]; then 
-		update_rootset_cpumask $ALL_CPUS_MASK
-
-		# Move tasks to the root cpuset
-		while read t; do
-			echo $t > tasks 2>/dev/null
-		done < gpp/tasks
+		move_tasks / $ALL_CPUS_MASK
 
 		# Remove gpp
 		rmdir gpp
