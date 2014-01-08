@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# $1 mask to check for
+cpumask_req=$1
+
+if [ "$cpumask_req" = "" ]; then
+	echo "Usage: check-affinity <mask>"
+	exit 1
+fi
+
+# Init cpusets
+cpusetdir=/sys/fs/cgroup/cpuset
+if [ ! -d $cpusetdir -o ! -f $cpusetdir/cpuset.cpus ]; then
+	echo $cpusetdir does not exist or cpuset fs is not mounted
+	exit 1
+fi
+ 
+# Iterate over all tasks in the system
+for p in /proc/[0-9]*; do
+	mapfile -t stat <$p/status || continue
+
+	pid=
+	name=
+	cpumask=
+	kthread="(kthread)"
+	for ((i=0; i < ${#stat[*]}; i++)); do
+		case ${stat[$i]} in
+			Pid:*)    pid=${stat[$i]#*:[[:space:]]}  ;;
+			Name:*)   name=${stat[$i]#*:[[:space:]]} ;;
+			Cpu*ed:*) cpumask=${stat[$i]#*:[[:space:]]} ;;
+			VmSize:*) kthread="" ;;
+		esac
+	done
+
+	[ "$cpumask" != "$cpumask_req" ] && echo -e "$name\t- pid:$pid $kthread\tcpumask:$cpumask"
+done
