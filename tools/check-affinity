@@ -1,12 +1,61 @@
 #!/bin/bash
 
-# $1 mask to check for
-cpumask_req=$1
+# Check cpumask of all tasks in the system; print tasks with cpumask that doesn't
+# match the expected mask 
+# 	$1 - expected cpumask
+check_tasks()
+{
+	cpumask_exp=$1
 
-if [ "$cpumask_req" = "" ]; then
-	echo "Usage: check-affinity <mask>"
-	exit 1
-fi
+	echo "Checking all tasks: expected cpumask $cpumask_exp"
+
+	for p in /proc/[0-9]*; do
+		mapfile -t stat <$p/status || continue
+	
+		pid=
+		name=
+		cpumask=
+		kthread="(kthread)"
+		for ((i=0; i < ${#stat[*]}; i++)); do
+			case ${stat[$i]} in
+				Pid:*)    pid=${stat[$i]#*:[[:space:]]}  ;;
+				Name:*)   name=${stat[$i]#*:[[:space:]]} ;;
+				Cpu*ed:*) cpumask=${stat[$i]#*:[[:space:]]} ;;
+				VmSize:*) kthread="" ;;
+			esac
+		done
+	
+		[ "$cpumask" != "$cpumask_exp" ] && echo -e "$name\t- pid:$pid $kthread\tcpumask:$cpumask"
+	done
+}
+
+# Check cpumask of all IRQs in the system; print IRQs with cpumask that doesn't
+# match the expected mask 
+# 	$1 - expected cpumask
+check_irqs()
+{
+	cpumask_exp=$1
+
+	cpumask_dft=$(</proc/irq/default_smp_affinity)
+
+	if [ "$cpumask_dft" != "$cpumask_exp" ]; then
+		echo "Default IRQ affinity mask is incorrect: $cpumask_dft expected $cpumask_exp"
+		exit 1
+	fi
+
+	echo "Checking all IRQs: expected cpumask $cpumask_exp"
+
+	for p in /proc/irq/[0-9]*; do
+		cpumask=$(<$p/smp_affinity)
+		irq=${p##*/}
+		[ "$cpumask" != "$cpumask_exp" ] && echo -e "$irq\t- \tcpumask:$cpumask"
+	done
+}
+
+
+# Load config
+[ -f /etc/sysconfig/syspart ] || exit 5
+. /etc/sysconfig/syspart
 
 # Init cpusets
 cpusetdir=/sys/fs/cgroup/cpuset
@@ -15,22 +64,21 @@ if [ ! -d $cpusetdir -o ! -f $cpusetdir/cpuset.cpus ]; then
 	exit 1
 fi
  
-# Iterate over all tasks in the system
-for p in /proc/[0-9]*; do
-	mapfile -t stat <$p/status || continue
+# Compute masks based on the config
+# All cpus in the system
+ALL_CPUS_MASK=`cat $cpusetdir/cpuset.cpus | bitops --fmt=lX`
 
-	pid=
-	name=
-	cpumask=
-	kthread="(kthread)"
-	for ((i=0; i < ${#stat[*]}; i++)); do
-		case ${stat[$i]} in
-			Pid:*)    pid=${stat[$i]#*:[[:space:]]}  ;;
-			Name:*)   name=${stat[$i]#*:[[:space:]]} ;;
-			Cpu*ed:*) cpumask=${stat[$i]#*:[[:space:]]} ;;
-			VmSize:*) kthread="" ;;
-		esac
-	done
+# GPP cpus and memory nodes
+GPP_CPUS_MASK=$(echo $GPP_CPUS | bitops --fmt=lX)
+GPP_CPUS_LIST=$GPP_CPUS
+GPP_MEMS_LIST=$GPP_MEMS
 
-	[ "$cpumask" != "$cpumask_req" ] && echo -e "$name\t- pid:$pid $kthread\tcpumask:$cpumask"
-done
+# ISP cpus and memory nodes
+[ "$ISP_CPUS" = "" ] && ISP_CPUS_MASK=$(echo $ALL_CPUS_MASK | bitops --andnot $GPP_CPUS_MASK)
+[ "$ISP_MEMS" = "" ] && ISP_MEMS=$GPP_MEMS
+ISP_EACH_CPU=$(echo $ISP_CPUS_MASK | bitops --fmt=xE)
+ISP_MEMS_LIST=$ISP_MEMS
+
+check_tasks $GPP_CPUS_MASK
+echo
+check_irqs  $GPP_CPUS_MASK
