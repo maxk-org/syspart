@@ -4,32 +4,21 @@
 Summary: System partitioning tools
 Name: syspart
 Version: @VERSION@
-Release: 8
+Release: @RELEASE@
 License: BSD 2-clause
 Group: Applications/System
 Vendor: Max Krasnyansky
 Packager: Max Krasnyansky <max.krasnyansky@gmail.com>
 BuildRoot: %{prefix}
-source0: syspart-%{version}.tar.gz
 
 %description
 Syspart is a set of tools for partitioning system resoures.
 CPUs, interrupt handling, etc.
 
-%prep
-%setup
-
-%build
-./bootstrap
-./configure && make
-
-%install
-make DESTDIR=%{buildroot} install
-
 %files
 %defattr(-, root, root)
-/etc/profile.d/syspart.sh
-/etc/init.d/syspart
-/usr/lib/systemd/system/syspart.service
 %config /etc/sysconfig/syspart
+/etc/init.d/syspart
+%{prefix}/lib/systemd/system/syspart.service
 %{prefix}/bin/bitops
+%{prefix}/sbin/syspart-check

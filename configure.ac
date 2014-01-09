@@ -1,25 +1,19 @@
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT()
+AC_INIT(syspart, 9999)
 
 AC_CANONICAL_SYSTEM
 
-VERSION=`cat $srcdir/VERSION`
-AC_SUBST(VERSION)
-AM_INIT_AUTOMAKE(syspart, $VERSION)
-AC_DEFINE_UNQUOTED(BUILDATE, "`date '+%D %k:%M:%S'`")
+AM_INIT_AUTOMAKE([silent-rules subdir-objects])
+AM_SILENT_RULES([yes])
 
 dnl Checks for programs.
 AC_PROG_CC
 AC_PROG_INSTALL
 
 AC_PREFIX_DEFAULT(/usr)
-
 AC_SUBST(prefix)
 
 AC_OUTPUT([
     Makefile
-    bitops/Makefile
-    init/Makefile
-    syspart.spec
 ])
