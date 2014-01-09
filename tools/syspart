@@ -214,7 +214,8 @@ check_tasks()
 	echo "Checking all tasks: expected cpumask $cpumask_exp"
 
 	for p in /proc/[0-9]*; do
-		mapfile -t stat <$p/status || continue
+		# Parse /proc/pid/status
+		mapfile -t stat < $p/status || continue
 	
 		pid=
 		name=
@@ -228,8 +229,14 @@ check_tasks()
 				VmSize:*) kthread="" ;;
 			esac
 		done
-	
+
+		# Parse /proc/pid/stat
+		mapfile -t stat < <(tr ' ' '\n' < $p/stat)
+		flags=${stat[8]}
+		last_cpu=${stat[38]}
+
 		[ "$cpumask" != "$cpumask_exp" ] && echo -e "$name\t- pid:$pid $kthread\tcpumask:$cpumask"
+
 	done
 }
 
