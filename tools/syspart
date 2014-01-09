@@ -220,13 +220,13 @@ check_tasks()
 		pid=
 		name=
 		cpumask=
-		kthread="(kthread)"
+		kthread=1
 		for ((i=0; i < ${#stat[*]}; i++)); do
 			case ${stat[$i]} in
 				Pid:*)    pid=${stat[$i]#*:[[:space:]]}  ;;
 				Name:*)   name=${stat[$i]#*:[[:space:]]} ;;
 				Cpu*ed:*) cpumask=${stat[$i]#*:[[:space:]]} ;;
-				VmSize:*) kthread="" ;;
+				VmSize:*) kthread=0 ;;
 			esac
 		done
 
@@ -234,8 +234,14 @@ check_tasks()
 		mapfile -t stat < <(tr ' ' '\n' < $p/stat)
 		flags=${stat[8]}
 		last_cpu=${stat[38]}
+		((movable=($flags & 0x4000000)==0)) # linux/sched.h:#define PF_NO_SETAFFINITY 0x04000000
 
-		[ "$cpumask" != "$cpumask_exp" ] && echo -e "$name\t- pid:$pid $kthread\tcpumask:$cpumask"
+		extra="("
+		[ $kthread -ne 0 ] && extra+="kthread,"
+		[ $movable -eq 0 ] && extra+="not-movable,"
+		extra+=")"
+	
+		[ "$cpumask" != "$cpumask_exp" ] && echo -e "$name\t- pid:$pid $extra\tcpumask:$cpumask\tlast_cpu:$last_cpu"
 
 	done
 }
