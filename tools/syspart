@@ -4,39 +4,20 @@ SYSCTL="/sbin/sysctl -q -e -w"
 
 CPUSETDIR=/sys/fs/cgroup/cpuset
 
-# Load config and setup the environment
-load_config()
+# Setup the environment
+init_env()
 {
-	[ -f /etc/sysconfig/syspart ] || exit 1
-	. /etc/sysconfig/syspart
-
 	# Init cpusets
 	if [ ! -d $CPUSETDIR -o ! -f $CPUSETDIR/cpuset.cpus ]; then
 		echo $CPUSETDIR does not exist or cpuset fs is not mounted
 		exit 1
 	fi
  
-	# Compute masks based on the config
-	# All cpus in the system
-	ALL_CPUS_MASK=`cat $CPUSETDIR/cpuset.cpus | bitops --fmt=lX`
-
-	# Backwards compatibility
-	[ "$GPP_CPUS" = "" ] && GPP_CPUS=$PAR0_CPUS
-	[ "$GPP_MEMS" = "" ] && GPP_MEMS=$PAR0_MEMS
-
-	# GPP cpus and memory nodes
-	GPP_CPUS_MASK=`echo $GPP_CPUS | bitops --fmt=lX`
-	GPP_CPUS_LIST=$GPP_CPUS
-	GPP_MEMS_LIST=$GPP_MEMS
-
-	# ISP cpus and memory nodes
-	[ "$ISP_CPUS" = "" ] && ISP_CPUS_MASK=`echo $ALL_CPUS_MASK | bitops --andnot $GPP_CPUS_MASK`
-	[ "$ISP_MEMS" = "" ] && ISP_MEMS=$GPP_MEMS
-	ISP_EACH_CPU=`echo $ISP_CPUS_MASK | bitops --fmt=xE`
-	ISP_MEMS_LIST=$ISP_MEMS
+	# All CPUs in the system
+	ALL_CPUS_MASK=$(bitops --fmt=lX < $CPUSETDIR/cpuset.cpus)
 }
 
-# Task mover helper
+# Task move helper
 #  $1 - cpuset name (. for root)
 #  $2 - cpumask
 do_move_tasks()
@@ -52,7 +33,7 @@ do_move_tasks()
 		userspace=0
 		for ((i=0; i < ${#stat[*]}; i++)); do
 			case ${stat[$i]} in
-				Pid:*)    pid=${stat[$i]#*:[[:space:]]}  ;;
+				Pid:*)    pid=${stat[$i]#*:[[:space:]]} ;;
 				VmSize:*) userspace=1 ;;
 			esac
 		done
@@ -79,7 +60,7 @@ move_tasks()
 	[ $cpuset = / ] && cpuset=.
 
 	# Set default kthread cpumask (if supported)
-	$SYSCTL "kernel.default_kthread_cpumask=$GPP_CPUS_MASK"
+	$SYSCTL "kernel.default_kthread_cpumask=$mask"
 
 	# Run this twice to handle potential race where first iteration
 	# might miss new tasks created after we scan the PID space. 
@@ -88,13 +69,31 @@ move_tasks()
 }
 
 # Create partitions (GPP and ISP)
+#  $1 - List of ISP CPUs
+#  $2 - List of ISP Memory nodes
+#  $3 - List of GPP Memory nodes
 create_partitions()
 {
+	ISP_CPUS_LIST=$1
+	ISP_MEMS_LIST=${2:-0}
+	GPP_MEMS_LIST=${3:-0}
+
+	if [ "$ISP_CPUS_LIST" = "" ]; then
+		echo "ISP CPUs list (--isp-cpus) was not specified."
+		exit 1
+	fi
+
+	ISP_CPUS_MASK=$(echo $ISP_CPUS_LIST | bitops --fmt=lX)
+	GPP_CPUS_MASK=$(echo $ALL_CPUS_MASK | bitops --andnot $ISP_CPUS_MASK)
+	GPP_CPUS_LIST=$(echo $GPP_CPUS_MASK | bitops --fmt=xL)
+
+	ISP_EACH_CPU=$(echo $ISP_CPUS_MASK | bitops --fmt=xE)
+
 	# Do not start twice to avoid conflicts.
 	# For example we do not want to bring CPUs on/offline 
 	# if stopmachine is disabled on them.
 	if [ -d $CPUSETDIR/gpp ]; then
-		echo System partitioning is already setup
+		echo "System partitioning is already setup."
 		return 1
 	fi
 
@@ -180,13 +179,12 @@ destroy_partitions()
 	# Remove gpp cpuset
 	while [ -d $CPUSETDIR/gpp ]; do 
 		move_tasks / $ALL_CPUS_MASK
-
 		rmdir $CPUSETDIR/gpp &>/dev/null
 	done
 
 	# Remove per cpu cpusets
-	for i in $ISP_EACH_CPU; do
-		[ -d $CPUSETDIR/cpu$i ] && rmdir $CPUSETDIR/cpu$i
+	for i in $CPUSETDIR/cpu[0-9]*; do
+		rmdir $i
 	done
 
 	# Enable systemwide balancing
@@ -206,20 +204,198 @@ destroy_partitions()
 	done
 }
 
+# Check cpumask of all tasks in the system; print tasks with cpumask that doesn't
+# match the expected mask 
+# 	$1 - expected cpumask
+check_tasks()
+{
+	cpumask_exp=$1
+
+	echo "Checking all tasks: expected cpumask $cpumask_exp"
+
+	for p in /proc/[0-9]*; do
+		mapfile -t stat <$p/status || continue
+	
+		pid=
+		name=
+		cpumask=
+		kthread="(kthread)"
+		for ((i=0; i < ${#stat[*]}; i++)); do
+			case ${stat[$i]} in
+				Pid:*)    pid=${stat[$i]#*:[[:space:]]}  ;;
+				Name:*)   name=${stat[$i]#*:[[:space:]]} ;;
+				Cpu*ed:*) cpumask=${stat[$i]#*:[[:space:]]} ;;
+				VmSize:*) kthread="" ;;
+			esac
+		done
+	
+		[ "$cpumask" != "$cpumask_exp" ] && echo -e "$name\t- pid:$pid $kthread\tcpumask:$cpumask"
+	done
+}
+
+# Check cpumask of all IRQs in the system; print IRQs with cpumask that doesn't
+# match the expected mask 
+# 	$1 - expected cpumask
+check_irqs()
+{
+	cpumask_exp=$1
+
+	cpumask_dft=$(</proc/irq/default_smp_affinity)
+
+	if [ "$cpumask_dft" != "$cpumask_exp" ]; then
+		echo "Default IRQ affinity mask is incorrect: $cpumask_dft expected $cpumask_exp"
+		exit 1
+	fi
+
+	echo "Checking all IRQs: expected cpumask $cpumask_exp"
+
+	for p in /proc/irq/[0-9]*; do
+		cpumask=$(<$p/smp_affinity)
+		irq=${p##*/}
+		[ "$cpumask" != "$cpumask_exp" ] && echo -e "$irq\t- \tcpumask:$cpumask"
+	done
+}
+
+# Create partitions (GPP and ISP)
+#  $1 - List of ISP CPUs
+#  $2 - List of ISP Memory nodes
+#  $3 - List of GPP Memory nodes
+check_partitions()
+{
+	ISP_CPUS_LIST_EXP=$1
+	ISP_MEMS_LIST_EXP=$2
+	GPP_MEMS_LIST_EXP=$3
+
+	# Detect GPP setup
+	if [ ! -d $CPUSETDIR/gpp ]; then
+		echo "GPP cpuset doesn't exist. Looks like the system is not partitioned."
+		exit 1
+	fi
+
+	GPP_CPUS_LIST=$(<$CPUSETDIR/gpp/cpuset.cpus)
+	GPP_MEMS_LIST=$(<$CPUSETDIR/gpp/cpuset.mems)
+	GPP_CPUS_MASK=$(echo $GPP_CPUS_LIST | bitops --fmt=lX)
+	ISP_CPUS_MASK=$(echo $ALL_CPUS_MASK | bitops --andnot $GPP_CPUS_MASK)
+	ISP_CPUS_LIST=$(echo $ISP_CPUS_MASK | bitops --fmt=xL)
+	ISP_EACH_CPU=$(echo $ISP_CPUS_MASK | bitops --fmt=xE)
+
+	if [ "$ISP_CPUS_LIST_EXP" != "" -a "$ISP_CPUS_LIST_EXP" != "$ISP_CPUS_LIST" ]; then
+		echo "ISP CPUs list $ISP_CPUS_LIST is incorrect, expected $ISP_CPUS_LIST"
+		exit 1
+	fi
+
+	# Check cpusets for each CPU in ISP
+	for i in $ISP_EACH_CPU; do
+		if [ ! -d $CPUSETDIR/cpu$i ]; then
+			echo "Missing cpuset for cpu$i"
+			exit 1
+		fi
+		ISP_MEMS_LIST=$(<$CPUSETDIR/cpu$i/cpuset.mems)
+	done
+
+	echo "Detected system partitioning:"
+	echo -e "\tisp-cpus: $ISP_CPUS_LIST isp-mems: $ISP_MEMS_LIST"
+	echo -e "\tgpp-cpus: $GPP_CPUS_LIST gpp-mems: $GPP_MEMS_LIST"
+
+	echo
+	check_tasks $GPP_CPUS_MASK
+
+	echo
+	check_irqs  $GPP_CPUS_MASK
+}
+
+usage()
+{
+	echo "Usage: syspart [options] <action>"
+	echo "Options:"
+	echo -e "\t--isp-cpus CPUs\tList of CPUs assigned to ISP (isolated partition)"
+	echo -e "\t--isp-mems MEMs\tList of memory nodes assigned to ISP"
+	echo -e "\t--gpp-mems MEMs\tList of memory nodes assigned to GPP (general purpose partition)"
+	echo "Actions:"
+	echo -e "\t--create\tCreate partitions"
+	echo -e "\t--destroy\tDestroy partitions"
+	echo -e "\t--check\tVerify system partitions (tasks, IRQs, etc)"
+}
+
+opt_isp_cpus=
+opt_isp_mems=
+opt_gpp_mems=
+
+parse_opts()
+{
+	mode=""
+	while test $# != 0; do
+  		case $1 in
+  		--*=*)
+  			option=$(expr "X$1" : 'X\([^=]*\)=')
+  			optarg=$(expr "X$1" : 'X[^=]*=\(.*\)')
+  			nextopt=:
+  			;;
+  		*)
+  			option=$1
+  			optarg=$2
+  			nextopt=shift
+  			;;
+  		esac
+
+		case $option in
+		--isp-cpus)
+			opt_isp_cpus=$optarg
+			$nextopt
+			;;
+		--isp-mems)
+			opt_isp_mems=$optarg
+			$nextopt
+			;;
+		--gpp-mems)
+			opt_gpp_mems=$optarg
+			$nextopt
+			;;
+
+		--create)
+			mode="create"
+			;;
+		--destroy)
+			mode="destroy"
+			;;
+		--check)
+			mode="check"
+			;;
+		--help)
+			usage
+			exit 0
+			;;
+		*)
+			usage
+			exit 1
+			;;
+		esac
+
+		shift
+	done
+}
+
+# Parse command line options
+parse_opts $*
+
 # Parse cmdline
-case "$1" in
+case $mode in
 	create)
-		load_config
-		create_partitions
+		init_env
+		create_partitions "$opt_isp_cpus" "$opt_isp_mems" "$opt_gpp_mems"
 		;;
 
 	destroy)
-		load_config
+		init_env
 		destroy_partitions
 		;;
 
+	check)
+		init_env 
+		check_partitions "$opt_isp_cpus" "$opt_isp_mems" "$opt_gpp_mems"
+		;;
+
 	*)
-		echo "Usage: syspart-config <create|destroy>"
-		exit 1
+		usage
 		;;
 esac
