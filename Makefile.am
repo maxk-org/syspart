@@ -49,4 +49,4 @@ bitops_bitops_SOURCES = bitops/bitmap.h bitops/bitmap.c bitops/bitops.c
 
 #
 # Main scripts
-sbin_SCRIPTS   = tools/syspart-check
+sbin_SCRIPTS   = tools/syspart
