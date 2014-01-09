@@ -21,4 +21,4 @@ CPUs, interrupt handling, etc.
 /etc/init.d/syspart
 %{prefix}/lib/systemd/system/syspart.service
 %{prefix}/bin/bitops
-%{prefix}/sbin/syspart-check
+%{prefix}/sbin/syspart
