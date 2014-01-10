@@ -124,9 +124,9 @@ static struct option main_lopts[] = {
         { 0, 0, 0, 0 }
 };
 
-static char main_sopts[] = "hf:wia:o:x:A:";
+static const char main_sopts[] = "hf:wia:o:x:A:";
 
-static char main_help[] = 
+static const char main_help[] = 
         "bitops reads bit masks from standard input and performs various\n"
         "operations on them. Result is written to standard out.\n"
         "Usage:\n"
