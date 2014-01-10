@@ -11,23 +11,19 @@
 [ -f /etc/sysconfig/syspart ] || exit 5
 . /etc/sysconfig/syspart
 
-SYSCTL="/sbin/sysctl -q -e -w"
+# Main syspart tool
+SYSPART=/usr/sbin/syspart
 
 # Init cpusets
-cpusetdir=/sys/fs/cgroup/cpuset
-if [ ! -d $cpusetdir -o ! -f $cpusetdir/cpuset.cpus ]; then
-	echo $cpusetdir does not exist or cpuset fs is not mounted
+CPUSETDIR=/sys/fs/cgroup/cpuset
+if [ ! -d $CPUSETDIR -o ! -f $CPUSETDIR/cpuset.cpus ]; then
+	echo $CPUSETDIR does not exist or cpuset fs is not mounted
 	exit 1
 fi
  
-cd $cpusetdir
-
-# **** The rest of the script assumes that current directory is 
-# **** the root of the cpuset tree
-
 # Compute masks based on the config
 # All cpus in the system
-ALL_CPUS_MASK=`cat cpuset.cpus | bitops --fmt=lX`
+ALL_CPUS_MASK=`cat $CPUSETDIR/cpuset.cpus | bitops --fmt=lX`
 
 # Backwards compatibility
 [ "$GPP_CPUS" = "" ] && GPP_CPUS=$PAR0_CPUS
@@ -41,173 +37,14 @@ GPP_MEMS_LIST=$GPP_MEMS
 # ISP cpus and memory nodes
 [ "$ISP_CPUS" = "" ] && ISP_CPUS_MASK=`echo $ALL_CPUS_MASK | bitops --andnot $GPP_CPUS_MASK`
 [ "$ISP_MEMS" = "" ] && ISP_MEMS=$GPP_MEMS
-ISP_EACH_CPU=`echo $ISP_CPUS_MASK | bitops --fmt=xE`
+ISP_CPUS_LIST=`echo $ISP_CPUS_MASK | bitops --fmt=xL`
 ISP_MEMS_LIST=$ISP_MEMS
-
-# Move tasks into the specified partition.
-#  $1 - cpuset name (. for root)
-#  $2 - cpumask
-# Userspace tasks are moved into the apropriate cpuset.
-# Kernel tasks simply get their cpumask adjusted because 
-# most kernel threads are ignored by cpusets anyways.
-move_tasks()
-{
-	cpuset=$1
-	mask=$2
-
-	[ $cpuset = / ] && cpuset=.
-
-	# Set default kthread cpumask (if supported)
-	$SYSCTL "kernel.default_kthread_cpumask=$GPP_CPUS_MASK"
-
-	# Iterate over all tasks in the system
-	for p in /proc/[0-9]*; do
-		mapfile -t stat <$p/status || continue
-
-		pid=
-		userspace=0
-		for ((i=0; i < ${#stat[*]}; i++)); do
-			case ${stat[$i]} in
-				Pid:*)    pid=${stat[$i]/*:/}  ;;
-				VmSize:*) userspace=1          ;;
-			esac
-		done
-
-		if [ $userspace -eq 1 ]; then
-			echo $pid >$cpuset/cgroup.procs
-		else
-			taskset -p $mask $pid &>/dev/null
-		fi
-	done 2>/dev/null
-}
-
-# Create cpusets
-create_partitions()
-{
-	# Do not start twice to avoid conflicts.
-	# For example we do not want to bring CPUs on/offline 
-	# if stopmachine is disabled on them.
-	if [ -d gpp ]; then
-		echo System partitioning is already setup
-		return 1
-	fi
-
-	# Set default IRQ affinity to GPP cpus
-	echo $GPP_CPUS_MASK > /proc/irq/default_smp_affinity
-
-	# Set affinity for all active IRQs
-	for i in /proc/irq/[0-9]*; do
-		echo $GPP_CPUS_MASK > $i/smp_affinity 2>/dev/null
-	done
-
-	# Constrain unbounded workqueues to GPP cpus
-	for i in /sys/bus/workqueue/devices/*; do 
-		[ -f $i/cpumask ] && echo $GPP_CPUS_MASK > $i/cpumask
-	done
-
-	# Disable systemwide load balancing
-	echo 0 > cpuset.sched_load_balance
-
-	# Bring ISP cpus offline
-	for i in $ISP_EACH_CPU; do
-		echo 0 > /sys/devices/system/cpu/cpu$i/online
-	done
-
-	# Create gpp cpuset
-	if [ ! -d gpp ]; then
-		mkdir gpp
-		echo $GPP_CPUS_LIST > gpp/cpuset.cpus
-		echo $GPP_MEMS_LIST > gpp/cpuset.mems
-		echo 0 > gpp/cpuset.sched_load_balance
-	fi
-
-	# Move tasks into GPP
-	move_tasks gpp $GPP_CPUS_MASK
-
-	# Bring ISP cpus online.
-	# Put each CPU into a separate cpuset, otherwise they 
-	# endup in the same root domain which causes rt scheduler
-	# lock contention.
-	for i in $ISP_EACH_CPU; do
-		echo 1 > /sys/devices/system/cpu/cpu$i/online
-		mkdir cpu$i
-		echo $i > cpu$i/cpuset.cpus
-		echo $ISP_MEMS_LIST > cpu$i/cpuset.mems
-	done
-
-	# Move any tasks that might have started/changed due to
-	# CPU onlining.
-	move_tasks gpp $GPP_CPUS_MASK
-
-	# Disable stopmachine (if supported)
-	$SYSCTL "kernel.stopmachine_disabled=1"
-
-	# Restrict pagedrain to GPP cpus (if supported)
-	$SYSCTL "vm.pagedrain_cpumask=$GPP_CPUS_MASK"
-
-	# Disable scheduler RT throttling 
-	$SYSCTL "kernel.sched_rt_runtime_us=-1"
-
-	# Disable softlockup detection.
-	# Ideally this should be a cpumask 
-	$SYSCTL "kernel.softlockup_thresh=-1"
-
-	# Enable balancing in GPP.
-	# We do it as the last step to avoid redundant domain 
-	# rebuilds.
-	echo 1 > gpp/cpuset.sched_load_balance
-}
-
-# Destory cpusets created for the system partitions
-destroy_partitions()
-{
-	# Enable stopmachine (if supported)
-	$SYSCTL "kernel.stopmachine_disabled=0"
-
-	# Unrestrict pagedrain (if supported)
-	$SYSCTL "vm.pagedrain_cpumask=$ALL_CPUS_MASK"
-
-	# Enable scheduler RT throttling
-	$SYSCTL "kernel.sched_rt_runtime_us=950000"
-
-	# Enable softlockup detection
-	$SYSCTL "kernel.softlockup_thresh=60"
-
-	if [ -d gpp ]; then 
-		move_tasks / $ALL_CPUS_MASK
-
-		# Remove gpp
-		rmdir gpp
-	fi
-
-	# Remove per cpu cpusets
-	for i in $ISP_EACH_CPU; do
-		[ -d cpu$i ] && rmdir cpu$i
-	done
-
-	# Enable systemwide balancing
-	echo 1 > cpuset.sched_load_balance
-
-	# UnConstrain unbounded workqueues to GPP cpus
-	for i in /sys/bus/workqueue/devices/*; do 
-		[ -f $i/cpumask ] && echo $ALL_CPUS_MASK > $i/cpumask
-	done
-
-	# Set default IRQ affinity
-	echo $ALL_CPUS_MASK > /proc/irq/default_smp_affinity
-
-	# Set affinity for all active IRQs
-	for i in /proc/irq/[0-9]*; do
-		echo $ALL_CPUS_MASK > $i/smp_affinity 2>/dev/null
-	done
-}
 
 start()
 {
  	echo -n $"Starting syspart: "
 
-	# Partition the system
-	create_partitions
+	$SYSPART --isp-cpus $ISP_CPUS_LIST --isp-mems $ISP_MEMS_LIST --gpp-mems $GPP_MEMS_LIST --create
 
 	success $"syspart"
 	echo 
@@ -220,14 +57,18 @@ stop()
 {
  	echo -n $"Stopping syspart: "
 
-	# Revert the partitioning
-	destroy_partitions
+	$SYSPART --destroy
 
 	success $"syspart"
 	echo
 
 	RETVAL=0
 	return $RETVAL 
+}
+
+status()
+{
+	$SYSPART --isp-cpus $ISP_CPUS_LIST --isp-mems $ISP_MEMS_LIST --gpp-mems $GPP_MEMS_LIST --check
 }
 
 case "$1" in
@@ -240,6 +81,7 @@ case "$1" in
     ;;
 
   status)
+    status
     ;;
 
   restart)
@@ -251,7 +93,7 @@ case "$1" in
     ;;
 
   *)
-    echo $"Usage: $0 {start|stop|restart|condrestart|status}"
+    echo $"Usage: $0 {start|stop|restart|status}"
     exit 3
     ;;
 esac
