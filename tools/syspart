@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# System 
+
 SYSCTL="/sbin/sysctl -q -e -w"
 
 CPUSETDIR=/sys/fs/cgroup/cpuset
@@ -239,7 +241,7 @@ check_tasks()
 		extra="("
 		[ $kthread -ne 0 ] && extra+="kthread,"
 		[ $movable -eq 0 ] && extra+="not-movable,"
-		extra+=")"
+		extra=${extra%,}")"
 	
 		[ "$cpumask" != "$cpumask_exp" ] && echo -e "$name\t- pid:$pid $extra\tcpumask:$cpumask\tlast_cpu:$last_cpu"
 
