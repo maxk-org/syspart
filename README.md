@@ -5,12 +5,13 @@ into domains (partitions) that can be used for different purposes. For example,
 one partition can be used for general purpose tasks and another for hard & soft
 realtime (RT) applications.
 
-Currently only two partitions are supported: 'gpp' and 'isp'.
-gpp (general-purpose partition) is setup for running general purpose tasks, handling interrupts, etc. 
-isp (isolatated partition) is setup for running RT tasks. CPUs in 'isp' are isolated from the rest
-of the system.
+Currently only two partitions are supported:
+* *GPP* (general-purpose partition) is setup for running general purpose tasks, handling 
+  interrupts, etc. 
+* *ISP* (isolatated partition) is setup for running RT tasks. CPUs in *ISP* are isolated 
+  from the rest of the system.
 
-The main tool is usually installed as /usr/sbin/syspart.
+The main tool is usually installed as */usr/sbin/syspart*.
 
 As of version 2.0 syspart has been tested with Linux kernels 3.12.x and requires additional
 patches to achieve complete isolation. See more info below.
