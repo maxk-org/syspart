@@ -38,12 +38,12 @@ Destory system partitions (if any) and return everything to default settings
 -----------------------------------------------------
 Syspart package comes with the default sysconfig file, sysv init.d script
 and systemd service file:
+* /etc/init.d/syspart
+* /etc/sysconfig/syspart
+* /usr/lib/systemd/system/syspart.service
 
-    /etc/init.d/syspart
-    /etc/sysconfig/syspart
-    /usr/lib/systemd/system/syspart.service
+See [sysconfig/syspart](init/syspart.sysconf) for more info on how to configure syspart service.  
 
-See sysconfig/syspart for more details on how to configure syspart service.  
 If needed you can enable syspart service to be started at boot
 
     /sbin/chkconfig syspart on
@@ -56,7 +56,7 @@ or on the newer versions that use systemd
 The main syspart tool by itself works fine under Ubuntu.
 Proper upstart integration is being worked on.
 
-5. Support kernel versions and extra patches
+5. Supported kernel versions and extra patches
 --------------------------------------------
 As of syspart-2.0 the officialy supported kernel is 3.12. Newer kernels should 
 work too.
