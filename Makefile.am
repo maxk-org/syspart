@@ -25,7 +25,7 @@ builddeb: builddeb.in Makefile
 deb: builddeb
 	sh builddeb $(debbuild)
 
-EXTRA_DIST = syspart.spec.in VERSION ChangeLog
+EXTRA_DIST = syspart.spec.in
 
 #
 # Init related scripts
