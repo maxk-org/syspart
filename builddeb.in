@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-package=hogl
+package=syspart
 
 version=@VERSION@
 release=@RELEASE@
