@@ -1,5 +1,8 @@
 #!/bin/bash
 
+cd $(dirname $0)
+FD=$(pwd)
+
 pkg=syspart
 
 if [ ! -e $pkg.spec ] ; then

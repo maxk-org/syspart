@@ -227,7 +227,7 @@ check_tasks()
 			case ${stat[$i]} in
 				Pid:*)    pid=${stat[$i]#*:[[:space:]]}  ;;
 				Name:*)   name=${stat[$i]#*:[[:space:]]} ;;
-				Cpu*ed:*) cpumask=${stat[$i]#*:[[:space:]]} ;;
+				Cpu*ed:*) cpumask=$(echo ${stat[$i]#*:[[:space:]]} | sed 's/^0*//g') ;;
 				VmSize:*) kthread=0 ;;
 			esac
 		done
@@ -245,7 +245,7 @@ check_tasks()
 	
 		[ "$cpumask" != "$cpumask_exp" ] && echo -e "$name\t- pid:$pid $extra\tcpumask:$cpumask\tlast_cpu:$last_cpu"
 
-	done
+	done | column -t
 }
 
 # Check cpumask of all IRQs in the system; print IRQs with cpumask that doesn't
@@ -255,7 +255,7 @@ check_irqs()
 {
 	cpumask_exp=$1
 
-	cpumask_dft=$(</proc/irq/default_smp_affinity)
+	cpumask_dft=$(sed 's/^0*//g' /proc/irq/default_smp_affinity)
 
 	if [ "$cpumask_dft" != "$cpumask_exp" ]; then
 		echo "Default IRQ affinity mask is incorrect: $cpumask_dft expected $cpumask_exp"
@@ -265,10 +265,11 @@ check_irqs()
 	echo "Checking all IRQs: expected cpumask $cpumask_exp"
 
 	for p in /proc/irq/[0-9]*; do
-		cpumask=$(<$p/smp_affinity)
+		cpumask=$(sed 's/^0*//g' $p/smp_affinity)
 		irq=${p##*/}
-		[ "$cpumask" != "$cpumask_exp" ] && echo -e "$irq\t- \tcpumask:$cpumask"
-	done
+		irq_name=$(for f in ${p}/*; do [ -d "$f" ] && printf "${f##*/},"; done)
+		[ "$cpumask" != "$cpumask_exp" ] && echo -e "${irq_name%,}($irq)\t- \tcpumask:$cpumask expected $cpumask_exp"
+	done | column -t -s "	"
 }
 
 # Create partitions (GPP and ISP)

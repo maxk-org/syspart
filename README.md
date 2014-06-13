@@ -58,14 +58,26 @@ The main syspart tool by itself works fine under Ubuntu.
 Proper upstart integration is being worked on.
 
 5. Supported kernel versions and extra patches
---------------------------------------------
+----------------------------------------------
 As of syspart-2.0 the officialy supported kernel is 3.12. Newer kernels should 
 work too.
 In order to achive complete CPU isolation the following patches on top 
-of 3.12 are recomended:
+of 3.12 are recommended:
 
     kthread: Introduce kernel.default_kthread_cpumask sysctl
     workqueue: Introduce workqueue.avoid_cpus kernel parameter
     pagealloc: Introduce cpumask for restricting page drain to certain cpus
     workqueue: Expose all system workqueues via sysfs
     sysctl: Add generic cpumask parser for sysctls
+
+A1. Versioning
+--------------
+Generation of Version and Release values is handled automatically via the
+[generate-version](generate-version) script. It is based on what the
+current git tag is. The tag naming convention is `"v" + X.Y + ["-" + Z]`
+where "X.Y" is the Version and "Z" is the optional Release value prefaced
+with a hyphen.
+
+For example:
+* "v2.0" -> Version = 2.0, Release = 0 (_default_)
+* "v2.0-1" -> Version = 2.0, Release = 1

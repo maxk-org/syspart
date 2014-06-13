@@ -17,7 +17,7 @@ CPUs, interrupt handling, etc.
 
 %files
 %defattr(-, root, root)
-%config /etc/sysconfig/syspart
+%config(noreplace) /etc/sysconfig/syspart
 /etc/init.d/syspart
 %{prefix}/lib/systemd/system/syspart.service
 %{prefix}/bin/bitops
